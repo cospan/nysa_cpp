@@ -13,9 +13,7 @@ env = Environment(CPPPATH=[
                   LIBS=['ftdipp1',
                         'ftdi1'])
 
-#Add the include file
-#src_files = ['src/main.cpp', 'src/dionysus.cpp']
-src_files = ['src/main.cpp', 'src/dionysus.cpp', 'src/nysa.cpp']
+src_files = utils.get_source_list(base = "src", recursive = True)
 env.Program (out_path,
              src_files)
 

@@ -104,3 +104,41 @@ def get_build_directory(absolute = False):
 
     return build_dir
 
+def get_source_list(base = "src", recursive = False):
+    """Returns a list of the source files to build
+    """
+    path = os.path.join(PROJECT_BASE,  base)
+    path = os.path.abspath(path)
+    file_list = []
+    if os.path.isfile(base):
+        #This is just one file to build, return it
+        file_list.append(base)
+
+    else:
+        if recursive:
+            file_list = _get_sources(path)
+        else:
+            search_path = os.path.join(path, "*.c")
+            p = glob.glob(search_path)
+            file_list.extend(p)
+            search_path = os.path.join(path, "*.cpp")
+            p = glob.glob(search_path)
+            file_list.extend(p)
+
+    return file_list
+
+def _get_sources(path):
+    """Recursive inner loop"""
+    file_path = []
+    for base, dirs, _ in os.walk(path):
+        for d in dirs:
+            p = os.path.join(base, d)
+            file_path.extend(_get_vfiles(p))
+
+    search_path = os.path.join(path, "*.c")
+    p = glob.glob(search_path)
+    file_path.extend(p)
+    search_path = os.path.join(path, "*.cpp")
+    p = glob.glob(search_path)
+    file_path.extend(p)
+    return file_path
