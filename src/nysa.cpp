@@ -1,4 +1,5 @@
 #include "nysa.hpp"
+#include <stdio.h>
 
 Nysa::Nysa(bool debug) {
   this->debug = debug;
@@ -19,11 +20,11 @@ int Nysa::parse_drt(){
 }
 
     //Low Level interface
-int write_periph_data(uint32_t dev_addr, uint32_t addr, uint32_t *data, uint32_t size){
+int Nysa::write_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size){
   return -1;
 }
 
-int read_periph_data(uint32_t dev_addr, uint32_t addr, uint32_t *data, uint32_t size){
+int Nysa::read_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size){
   return -1;
 }
 
@@ -46,7 +47,7 @@ int Nysa::write_register(uint32_t dev_addr, uint32_t reg_addr, uint32_t data){
   d[2] = ((data >> 16) & 0xFF);
   d[1] = ((data >> 8)  & 0xFF);
   d[0] = ( data        & 0xFF);
-  return this->write_periph_data(dev_addr, reg_addr, data, 4);
+  return this->write_periph_data(dev_addr, reg_addr, &d[0], 4);
 }
 
 int Nysa::read_register(uint32_t dev_addr, uint32_t reg_addr, uint32_t *data){
@@ -60,8 +61,9 @@ int Nysa::read_register(uint32_t dev_addr, uint32_t reg_addr, uint32_t *data){
 }
 
 int Nysa::set_register_bit(uint32_t dev_addr, uint32_t reg_addr, uint8_t bit){
-  uint32_t reg
+  uint32_t reg;
   int retval = 0;
+
   retval = this->read_register(dev_addr, reg_addr, &reg);
   CHECK_NYSA_ERROR("Error Reading Register");
 
@@ -71,7 +73,7 @@ int Nysa::set_register_bit(uint32_t dev_addr, uint32_t reg_addr, uint8_t bit){
   return 0;
 }
 int Nysa::clear_register_bit(uint32_t dev_addr, uint32_t reg_addr, uint8_t bit){
-  uint32_t reg
+  uint32_t reg;
   int retval = 0;
   retval = this->read_register(dev_addr, reg_addr, &reg);
   CHECK_NYSA_ERROR("Error Reading Register");

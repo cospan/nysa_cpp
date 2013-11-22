@@ -15,7 +15,6 @@ do{                                               \
 
 class Nysa {
   private:
-    bool open;
     bool debug;
 
     int parse_drt();
@@ -31,8 +30,8 @@ class Nysa {
     int write_register(uint32_t dev_addr, uint32_t reg_addr, uint32_t data);
     int read_register(uint32_t dev_addr, uint32_t reg_addr, uint32_t *data);
 
-    int write_periph_data(uint32_t dev_addr, uint32_t addr, uint32_t *data, uint32_t size);
-    int read_periph_data(uint32_t dev_addr, uint32_t addr, uint32_t *data, uint32_t size);
+    int write_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
+    int read_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
 
     int write_memory(uint32_t address, uint8_t *buffer, uint32_t size);
     int read_memory(uint32_t address, uint8_t *buffer, uint32_t size);
