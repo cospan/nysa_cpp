@@ -133,7 +133,7 @@ def _get_sources(path):
     for base, dirs, _ in os.walk(path):
         for d in dirs:
             p = os.path.join(base, d)
-            file_path.extend(_get_vfiles(p))
+            file_path.extend(_get_sources(p))
 
     search_path = os.path.join(path, "*.c")
     p = glob.glob(search_path)
