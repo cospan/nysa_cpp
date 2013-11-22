@@ -9,6 +9,9 @@ build
 *.swp
 *.swo
 
+# Scons
+.sconsign.dblite
+
 # C extensions
 *.so
 *.o
