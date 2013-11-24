@@ -4,27 +4,11 @@
 #include <libusb.h>
 #include <queue>
 #include "ftdi.hpp"
+#include "nysa.hpp"
+#include <cstring>
 
 #define DIONYSUS_VID 0x0403
 #define DIONYSUS_PID 0x8530
-
-#define RESET_BUTTON 0x20
-#define PROGRAM_BUTTON 0x10
-#define BUTTON_BITMASK (RESET_BUTTON | PROGRAM_BUTTON)
-
-#define NUM_TRANSFERS 256
-#define FTDI_BUFFER_SIZE 4096
-#define DEFAULT_BUFFER_SIZE (NUM_TRANSFERS * FTDI_BUFFER_SIZE)
-//#define PACKETS_PER_TRANSFER (FTID_BUFFER_SIZE / 512)
-
-
-//Error Conditions
-#define CHECK_ERROR(x) do{                                              \
-                          if (retval < 0){                              \
-                            if (this->debug) printf (x " %d\n", retval);\
-                            return retval;                              \
-                          }                                             \
-                       }while(0)
 
 /*
 const DIONYSUS_ERROR[] = {
@@ -32,14 +16,22 @@ const DIONYSUS_ERROR[] = {
 };
 */
 
-typedef struct _state_t state_t;
 
-class Dionysus : protected Ftdi::Context {
+typedef struct _state_t state_t;
+typedef struct _command_header_t command_header_t;
+typedef struct _response_header_t response_header_t;
+
+class Dionysus : public Nysa, protected Ftdi::Context {
+
   private:
     bool debug;
     bool comm_mode;
     uint16_t vendor;
     uint16_t product;
+    //used to keep track of buffers
+    std::queue<uint8_t *> buffer_queue;
+    std::queue<uint8_t *> buffers;
+
     //used to keep track of empty transfers
     std::queue<struct libusb_transfer *> transfer_queue;
     //Used to keep track of transfers in progress
@@ -53,8 +45,25 @@ class Dionysus : protected Ftdi::Context {
     void sleep(uint32_t useconds = 200000);
 
     int strobe_pin(unsigned char pin);
+    void usb_constructor();
+    void usb_destructor();
 
   public:
+
+    //Implementations of Nysa classes
+    int write_memory(uint32_t address, uint8_t *buffer, uint32_t size);
+    int read_memory(uint32_t address, uint8_t *buffer, uint32_t size);
+
+
+    int write_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
+    int read_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
+
+    int wait_for_interrupts(uint32_t timeout);
+
+    int ping();
+
+    int crash_report(uint32_t *buffer);
+
     //Constructor, Destructor
     Dionysus(bool debug = false);
     ~Dionysus();
@@ -68,8 +77,8 @@ class Dionysus : protected Ftdi::Context {
     void cancel_all_transfers();
 
     /* I/O */
-    int read(uint8_t *buf, uint32_t size);
-    int write(unsigned char *buf, int size);
+    int read(uint32_t header_len, uint8_t *buffer, uint32_t size);
+    int write(uint32_t header_len, unsigned char *buf, int size);
 
     //Bit Control
     int soft_reset();

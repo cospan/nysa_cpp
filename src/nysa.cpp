@@ -19,7 +19,7 @@ int Nysa::parse_drt(){
   //read the DRT Json File
 }
 
-    //Low Level interface
+//Low Level interface (These must be overridden by a subclass
 int Nysa::write_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size){
   return -1;
 }
@@ -36,6 +36,14 @@ int Nysa::read_memory(uint32_t address, uint8_t *buffer, uint32_t size){
 }
 
 int Nysa::wait_for_interrupts(uint32_t timeout){
+  return -1;
+}
+
+int Nysa::ping(){
+  return -1;
+}
+
+int Nysa::crash_report(uint32_t *buffer){
   return -1;
 }
 
@@ -112,14 +120,7 @@ int Nysa::get_drt_device_flags(uint32_t index, uint32_t *flags){
   return -1;
 }
 
-int Nysa::ping(){
-  return -1;
-}
-
 int Nysa::pretty_print_crash_report(){
-  return -1;
-}
-int Nysa::get_crash_report(uint32_t *buffer){
   return -1;
 }
 

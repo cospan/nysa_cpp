@@ -116,9 +116,10 @@ int main(int argc, char **argv){
 
   dionysus.open(args.vendor, args.product);
   if (dionysus.is_open()){
-    //dionysus.soft_reset();
     dionysus.reset();
-    dionysus.program_fpga();
+    //dionysus.program_fpga();
+    //dionysus.soft_reset();
+    dionysus.ping();
     dionysus.close();
   }
   return 0;
