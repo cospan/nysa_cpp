@@ -26,6 +26,22 @@
 #define RESPONSE_HEADER_LEN 11
 #define RESPONSE_INT_HEADER_LEN 13
 
+
+#define  MODEM_CTS  (1 << 4)  /* Clear to send                */
+#define  MODEM_DSR  (1 << 5)  /* Data set ready               */
+#define  MODEM_RI   (1 << 6)  /* Ring indicator               */
+#define  MODEM_RLSD (1 << 7)  /* Carrier detect               */
+#define  MODEM_DR   (1 << 8)  /* Data ready                   */
+#define  MODEM_OE   (1 << 9)  /* Overrun error                */
+#define  MODEM_PE   (1 << 10) /* Parity error                 */
+#define  MODEM_FE   (1 << 11) /* Framing error                */
+#define  MODEM_BI   (1 << 12) /* Break interrupt              */
+#define  MODEM_THRE (1 << 13) /* Transmitter holding register */
+#define  MODEM_TEMT (1 << 14) /* Transmitter empty            */
+#define  MODEM_RCVE (1 << 15) /* Error in RCVR FIFO           */
+
+
+
 //Error Conditions
 #define CHECK_ERROR(x) do{                                              \
                           if (retval < 0){                              \
@@ -63,6 +79,7 @@ struct _command_header_t {
 };
 
 struct _response_header_t {
+  uint16_t modem_status;
   uint8_t id;
   uint8_t status;
   uint8_t data_count[3];

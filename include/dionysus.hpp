@@ -42,14 +42,18 @@ class Dionysus : public Nysa, protected Ftdi::Context {
 
     //Functions
     int set_control_mode();
+    int set_comm_mode();
     void sleep(uint32_t useconds = 200000);
 
     int strobe_pin(unsigned char pin);
     void usb_constructor();
     void usb_destructor();
+    int read_sync(uint8_t *buffer, uint16_t size);
+    int write_sync(uint8_t *buffer, uint16_t size);
 
   public:
 
+    int print_status(bool get_status, uint16_t in_status);
     //Implementations of Nysa classes
     int write_memory(uint32_t address, uint8_t *buffer, uint32_t size);
     int read_memory(uint32_t address, uint8_t *buffer, uint32_t size);

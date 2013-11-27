@@ -153,14 +153,23 @@ int Dionysus::ping(){
   int retval = 0;
   //command_header_t * ch = &this->state->command_header;
   uint32_t len  = populate_ping_command(&this->state->command_header);
+  uint8_t buffer[4096];
 
+  //this->print_status(true, 0);
   //retval = this->write((uint8_t *) &this->state->command_header, len);
   retval = this->write(len, NULL, 0);
     CHECK_ERROR("Failed to Write Data");
+  //this->write_sync((uint8_t *) &this->state->command_header, len);
 
+  //this->read_sync(&buffer[0], 4096);
+  //this->print_status(true, 0);
   printd("Wrote ping request, waiting for a reply\n");
+  //while (!this->print_status(true, 0)){
+  //}
+  //printf ("Data ready!\n");
   retval = this->read(RESPONSE_HEADER_LEN, NULL, 0);
     CHECK_ERROR("Failed to Read Data");
+  this->print_status(true, 0);
   return 0;
 }
 

@@ -6,6 +6,9 @@
 #include <cstdlib>
 #include <libusb.h>
 
+
+
+
 static void print_transfer_status(struct libusb_transfer *transfer){
   printf ("Status: 0x%02X\n", transfer->status);
   switch(transfer->status){
@@ -35,10 +38,184 @@ static void print_transfer_status(struct libusb_transfer *transfer){
   }
 }
 
+int Dionysus::set_comm_mode(){
+  int retval = 0;
+  //retval = this->Ftdi::Context::set_interface(INTERFACE_A);
+  //  CHECK_ERROR("Failed to set interface");
+  retval = this->Ftdi::Context::set_bitmode(0x00, BITMODE_RESET);
+    CHECK_ERROR("Failed to reset bitmode");
+  retval = this->Ftdi::Context::flush(Context::Input | Context::Output);
+    CHECK_ERROR("Failed to purge buffers");
+  retval = this->Ftdi::Context::set_latency(2);
+    CHECK_ERROR("Failed to set latency");
+  retval = this->Ftdi::Context::set_read_chunk_size(FTDI_BUFFER_SIZE);
+    CHECK_ERROR("Failed to set read chunk size");
+  retval = this->Ftdi::Context::set_write_chunk_size(FTDI_BUFFER_SIZE);
+    CHECK_ERROR("Failed to set write chunk size");
+  //retval = this->Ftdi::Context::set_flow_control(SIO_RTS_CTS_HS);
+  retval = this->Ftdi::Context::set_flow_control(SIO_DISABLE_FLOW_CTRL);
+    CHECK_ERROR("Failed to set flow control to hw");
+
+    /*
+  retval = libusb_control_transfer( this->state->f->usb_dev,      // Context
+                                    FTDI_DEVICE_OUT_REQTYPE,      // Mix of VID:PID out Request
+                                    SIO_SET_FLOW_CTRL_REQUEST,    // Command to Execute
+                                    (SIO_RTS_CTS_HS | INTERFACE_A),   // Value
+                                    1,                            // Index
+                                    NULL,                         // uint8_t buffer
+                                    0,                            // Size of read
+                                    0);                           // Timeout
+                                    */
+  //printf ("Index: 0x%02X\n", state->f->index);
+
+
+  retval = this->Ftdi::Context::flush(Context::Input | Context::Output);
+    CHECK_ERROR("Failed to purge buffers");
+  //retval = this->Ftdi::Context::set_bitmode(0x00, BITMODE_SYNCFF);
+  //  CHECK_ERROR("Failed to set bitmode");
+  this->comm_mode = true;
+  return 0;
+}
+
+
+
+int Dionysus::print_status(bool get_status, uint16_t in_status){
+  //Get Control Status
+  uint16_t status;
+  uint8_t buffer[10];
+  int retval = 0;
+  //Control status transfer in from location
+  printd("Entered\n");
+  if (get_status){
+    retval = libusb_control_transfer( this->state->f->usb_dev,      // Context
+                                      FTDI_DEVICE_IN_REQTYPE,       // Mix of VID:PID In Request
+                                      SIO_POLL_MODEM_STATUS_REQUEST,// Command to execute
+                                      0,                            // Value
+                                      1,                            // Index
+                                      &buffer[0],                   // uint8_t buffer
+                                      2,                            // Size of read
+                                      0);                           // Timeout
+    if (retval != 2){
+      printf ("Error reading status: 0x%02X\n", retval);
+      return -1;
+    }
+    status = buffer[1] << 8 | buffer[0];
+  }
+  else {
+    status = in_status;
+  }
+  retval = 0;
+
+  printf ("Status: 0x%04X\n", status);
+  if (status & MODEM_CTS){
+    printf ("\tClear to send\n");
+  }
+  if (status & MODEM_DSR){
+    printf ("\tData set ready\n");
+  }
+  if (status & MODEM_RI){
+    printf ("\tRing indicator\n");
+  }
+  if (status & MODEM_RLSD) {
+      printf ("\tCarrier detect\n");
+  }
+  if (status & MODEM_DR){
+    printf ("\tData ready\n");
+    retval = 1;
+  }
+  if (status &  MODEM_OE){
+    printf ("\tOverrun error\n");
+  }
+  if (status &  MODEM_PE){
+    printf ("\tParity error\n");
+  }
+  if (status &  MODEM_FE){
+    printf ("\tFraming error\n");
+  }
+  if (status &  MODEM_BI){
+    printf ("\tBreak interrupt\n");
+  }
+  if (status &  MODEM_THRE){
+    printf ("\tTransmitter holding register\n");
+  }
+  if (status &  MODEM_TEMT){
+    printf ("\tTransmitter empty\n");
+    retval = 2;
+  }
+  if (status &  MODEM_RCVE){
+    printf ("\tError in RCVR FIFO\n");
+  }
+  printf ("\n");
+  return retval;
+}
+
 /* I/O */
+void Dionysus::usb_constructor(){
+  //Initialize the read structure
+  this->state = new state_t;
+  this->state->transfer_index = 0;
+  this->state->f = NULL;
+  this->state->finished = true;
+  this->state->error = 0;
+  this->state->buffer = NULL;
+  this->state->size_left = 0;
+  this->state->size = 0;
+  this->state->pos = 0;
+  this->state->transfer_queue = &this->transfer_queue;
+  this->state->buffer_queue = &this->buffer_queue;
+  this->state->d = this;
+  this->state->debug = debug;
+  this->state->read_data_count = 0;
+  this->state->read_dev_addr = 0;
+  this->state->read_reg_addr = 0;
+  this->state->read_mem_addr = 0;
+  this->state->mem_response = false;
+
+
+  for (int i = 0; i < NUM_TRANSFERS; i++){
+    uint8_t * buffer = new uint8_t[FTDI_BUFFER_SIZE];
+    this->buffer_queue.push(buffer);
+    this->buffers.push(buffer);
+    struct libusb_transfer *transfer = NULL;
+    transfer = libusb_alloc_transfer(0);
+    this->transfer_queue.push(transfer);
+    this->transfers.push(transfer);
+
+    if (!transfer){
+      printf ("Dionysus: Error while creating index %d usb transfer\n", i);
+    }
+  }
+}
+
+void Dionysus::usb_destructor(){
+  struct libusb_transfer *transfer = NULL;
+  uint8_t * buffer = NULL;
+  //Empty the working queues
+  while (!this->transfer_queue.empty()){
+    this->transfer_queue.pop();
+  }
+  //Empty the working queue
+  while (!buffer_queue.empty()){
+    this->buffer_queue.pop();
+  }
+  //Remove all the transfer_queue
+  while (!this->transfers.empty()){
+    transfer = this->transfers.front();
+    this->transfers.pop();
+    libusb_free_transfer(transfer);
+  }
+  while (!buffers.empty()){
+    buffer = this->buffers.front();
+    this->buffers.pop();
+    delete(buffer);
+  }
+}
+
 static void dionysus_readstream_cb(struct libusb_transfer *transfer){
   state_t * state = (state_t *) transfer->user_data;
   uint32_t buf_size = 0;
+  uint8_t *buffer = transfer->buffer;
+  uint16_t status = 0;
   int retval = 0;
 
   printds("Entered\n");
@@ -46,6 +223,13 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
     if (!state->header_found){
       //the response structure should be populated with header data
       //If this is a ping or a write then we are done, and we can exit immediately
+      printf ("Incomming buffer\n");
+      state->d->print_status(false, state->response_header.modem_status);
+      //for (int i = 0; i < RESPONSE_HEADER_LEN; i++){
+      for (int i = 0; i < 512; i++){
+        printf ("%02X ", buffer[i]);
+      }
+      printf ("\n");
       if (state->response_header.id != ID_RESPONSE){
         //Fail, ID does not match
         printf ("ID Response != 0x%0X: %02X\n", ID_RESPONSE, state->response_header.id);
@@ -86,6 +270,9 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
       }
 
       state->header_found = true;
+      if (state->size_left == 0){
+        state->transfer_queue->push(transfer);
+      }
     }
     else {
       //Not Header Data
@@ -134,76 +321,16 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
     }
     //Recover the transfer
     state->transfer_queue->push(transfer);
-    if (state->transfer_queue->size() == NUM_TRANSFERS){
-      //We're done!
-      state->finished = true;
-    }
-
+    state->buffer_queue->push(transfer->buffer);
     state->error = -1;
   }
+  if (state->transfer_queue->size() == NUM_TRANSFERS){
+    //We're done!
+    state->finished = true;
+  }
+
 }
 
-void Dionysus::usb_constructor(){
-  //Initialize the read structure
-  this->state = new state_t;
-  this->state->transfer_index = 0;
-  this->state->f = NULL;
-  this->state->finished = true;
-  this->state->error = 0;
-  this->state->buffer = NULL;
-  this->state->size_left = 0;
-  this->state->size = 0;
-  this->state->pos = 0;
-  this->state->transfer_queue = &this->transfer_queue;
-  this->state->buffer_queue = &this->buffer_queue;
-  this->state->d = this;
-  this->state->debug = debug;
-  this->state->read_data_count = 0;
-  this->state->read_dev_addr = 0;
-  this->state->read_reg_addr = 0;
-  this->state->read_mem_addr = 0;
-  this->state->mem_response = false;
-
-
-  for (int i = 0; i < NUM_TRANSFERS; i++){
-    uint8_t * buffer = new uint8_t[FTDI_BUFFER_SIZE];
-    this->buffer_queue.push(buffer);
-    this->buffers.push(buffer);
-    struct libusb_transfer *transfer = NULL;
-    transfer = libusb_alloc_transfer(0);
-    this->transfer_queue.push(transfer);
-    this->transfers.push(transfer);
-    
-    if (!transfer){
-      printf ("Dionysus: Error while creating index %d usb transfer\n", i);
-    }
-  }
-}
-
-void Dionysus::usb_destructor(){
-  struct libusb_transfer *transfer = NULL;
-  uint8_t * buffer = NULL;
-  //Empty the working queue
-  while (!this->transfer_queue.empty()){
-    this->transfer_queue.pop();
-  }
-  //Empty the working queue
-  while (!buffer_queue.empty()){
-    this->buffer_queue.pop();
-  }
-  //Remove all the transfer_queue
-  while (!this->transfers.empty()){
-    transfer = this->transfers.front();
-    this->transfers.pop();
-    libusb_free_transfer(transfer);
-    delete(transfer);
-  }
-  while (!buffers.empty()){
-    buffer = this->buffers.front();
-    this->buffers.pop();
-    delete(buffer);
-  }
-}
 
 int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
 
@@ -213,6 +340,7 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
   //4096 is the buffer size we set inside the FTDI Chip so we are looking to fill that up
   int packets_per_transfer = FTDI_BUFFER_SIZE / max_packet_size;
   uint32_t buf_size = 0;
+  uint8_t * buf = NULL;
   int retval = 0;
 
   uint32_t max_buf_size = packets_per_transfer * max_packet_size;
@@ -244,20 +372,25 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
   }
   if (header_len > 0){
     printd ("Sending header\n");
-    printf ("Length of transfer queue: %ld\n", transfer_queue.size());
+    //printf ("Length of transfer queue: %ld\n", transfer_queue.size());
     transfer = transfer_queue.front();
+    buf = buffer_queue.front();
     transfer_queue.pop();
+    buffer_queue.pop();
     print_transfer_status(transfer);
     libusb_fill_bulk_transfer(transfer,
                               this->state->f->usb_dev,
                               this->state->f->out_ep,
-                              (uint8_t *) &this->state->response_header,
-                              header_len,
+                              //(uint8_t *) &this->state->response_header,
+                              //9,
+                              buf,
+                              4096,
                               dionysus_readstream_cb,
                               this->state,
                               10000);
     print_transfer_status(transfer);
     retval = libusb_submit_transfer(transfer);
+    this->print_status(true, 0);
     print_transfer_status(transfer);
     if (retval != 0){
       printf ("Error when submitting read transfer: %d\n", retval);
@@ -282,19 +415,21 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
         this->state->size_left = 0;
       }
       transfer = transfer_queue.front();
+      buf = buffer_queue.front();
       transfer_queue.pop();
+      buffer_queue.pop();
       print_transfer_status(transfer);
       libusb_fill_bulk_transfer(transfer,
                                 this->state->f->usb_dev,
                                 this->state->f->out_ep,
-                                &buffer[this->state->pos],
+                                &state->buffer[state->pos],
                                 buf_size,
                                 dionysus_readstream_cb,
                                 this->state,
                                 1000);
       print_transfer_status(transfer);
       this->state->pos += buf_size;
- 
+
       retval = libusb_submit_transfer(transfer);
       if (retval != 0){
         //XXX: Need a way to clean up the USB stack
@@ -302,25 +437,21 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
         this->state->error = -2;
         break;
       }
- 
+
       //Check if there is more data to write
       if (this->state->size_left == 0){
         break;
       }
     }
   }
-
-  printd("Finished Assembling packets\n");
-  //retval = this->Ftdi::Context::set_bitmode(0xFF, BITMODE_SYNCFF);
-  //if (retval != 0){
-    //XXX: Need a way to clean up the usb stack
-  //  CHECK_ERROR("Failed to set Synchronous FIFO, Critical ErrRRrRRooOOoorRRRR!");
-  //}
-  retval = this->Ftdi::Context::set_bitmode(0x00, BITMODE_SYNCFF);
+  //retval = this->Ftdi::Context::set_bitmode(0x00, BITMODE_SYNCFF);
+  //this->print_status(true, 0);
   while (!this->state->finished){
     //XXX: How to wait for an interrupt and then finish this function?
     //print_transfer_status(transfer);
   }
+  retval = this->Ftdi::Context::set_rts(false);
+  retval = this->Ftdi::Context::set_dtr(false);
   return size - this->state->size_left;
 }
 
@@ -395,6 +526,7 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
   uint32_t max_buf_size = packets_per_transfer * max_packet_size;
 
   printd ("Write transaction\n");
+  retval = this->set_comm_mode();
   //Set reset so that we don't run into a stutter mode
   //retval = this->Ftdi::Context::set_bitmode(0xFF, BITMODE_RESET);
   //  CHECK_ERROR("Failed to reset Bitmode");
@@ -477,8 +609,8 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
       break;
     }
   }
+  retval = this->Ftdi::Context::set_bitmode(0xFF, BITMODE_SYNCFF);
 
-  retval = this->Ftdi::Context::set_bitmode(0x00, BITMODE_SYNCFF);
   if (retval != 0){
     this->state->error = -4;
     this->cancel_all_transfers();
@@ -494,7 +626,30 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
   if (this->debug){
     printf ("Finished %d left of %d\n", this->state->size_left, size);
   }
+  this->print_status(true, 0);
   return size - this->state->size_left;
+}
+
+int Dionysus::write_sync(uint8_t *buffer, uint16_t size){
+  int retval;
+  this->print_status(true, 0);
+  retval = this->Ftdi::Context::write(buffer, size);
+  printf ("Retval: %d\n", retval);
+  this->print_status(true, 0);
+  return 0;
+}
+
+int Dionysus::read_sync(uint8_t *buffer, uint16_t size){
+  int retval;
+  this->print_status(true, 0);
+  retval = this->Ftdi::Context::read(buffer, size);
+  printf ("Retval: %d\n", retval);
+  printf ("Buffer:\n");
+  for (int i = 0; i < size; i++){
+    printf ("%02X ", buffer[i]);
+  }
+  printf ("\n");
+  return 0;
 }
 
 void Dionysus::cancel_all_transfers(){

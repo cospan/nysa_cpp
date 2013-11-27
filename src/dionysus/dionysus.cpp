@@ -54,11 +54,11 @@ int Dionysus::open(int vendor, int product){
   retval = this->Ftdi::Context::set_write_chunk_size(FTDI_BUFFER_SIZE);
     CHECK_ERROR("Failed to set write chunk size");
   //Set hardware flow control
-  retval = this->Ftdi::Context::set_flow_control(SIO_RTS_CTS_HS);
-    CHECK_ERROR("Failed to set flow control");
+  //retval = this->Ftdi::Context::set_flow_control(SIO_RTS_CTS_HS);
+  //  CHECK_ERROR("Failed to set flow control");
   //Clear the buffers to flush things out
-  retval = this->Ftdi::Context::flush(Context::Input | Context::Output);
-    CHECK_ERROR("Failed to purge buffers");
+  //retval = this->Ftdi::Context::flush(Context::Input | Context::Output);
+  //  CHECK_ERROR("Failed to purge buffers");
 
   this->state->f = this->context();
   //libusb_set_debug(this->state->f->usb_ctx, 3);
