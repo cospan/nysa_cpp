@@ -13,7 +13,7 @@ int Dionysus::strobe_pin(unsigned char pin){
   int retval = 0;
 
   if (this->debug) printf ("Strobe signal\n");
-  retval = this->Ftdi::Context::set_bitmode(0x00, BITMODE_BITBANG);
+  retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_BITBANG);
     CHECK_ERROR("Failed to reset Bitmode");
 
   ftdi_context *bb_ftdi;

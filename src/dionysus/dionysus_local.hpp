@@ -20,10 +20,10 @@
 
 #define MEM_FLAG 0x10
 
-#define COMMAND_HEADER_LEN 13
+#define COMMAND_HEADER_LEN 9
 
 #define ID_RESPONSE 0xDC
-#define RESPONSE_HEADER_LEN 11
+#define RESPONSE_HEADER_LEN 5
 #define RESPONSE_INT_HEADER_LEN 13
 
 
@@ -79,7 +79,7 @@ struct _command_header_t {
 };
 
 struct _response_header_t {
-  uint16_t modem_status;
+//  uint16_t modem_status;
   uint8_t id;
   uint8_t status;
   uint8_t data_count[3];

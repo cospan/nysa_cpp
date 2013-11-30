@@ -108,7 +108,8 @@ int Dionysus::read_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer
   //Construct a packet header
   int retval = 0;
   uint32_t header_len = populate_read_periph_command(&this->state->command_header, (size / 4), dev_addr, addr);
-  retval = this->write(header_len, buffer, size);
+  retval = this->write_sync((uint8_t *) &this->state->command_header, header_len);
+  //retval = this->write(header_len, buffer, size);
     CHECK_ERROR("Failed to Write Data");
   retval = this->read(RESPONSE_HEADER_LEN, buffer, size);
     CHECK_ERROR("Failed to Read Data");
@@ -130,7 +131,8 @@ int Dionysus::read_memory(uint32_t address, uint8_t *buffer, uint32_t size){
   //Construct a packet header
   int retval = 0;
   uint32_t header_len = populate_read_mem_command(&this->state->command_header, (size / 4), address);
-  retval = this->write(header_len, buffer, size);
+  retval = this->write_sync((uint8_t *) &this->state->command_header, header_len);
+  //retval = this->write(header_len, buffer, size);
     CHECK_ERROR("Failed to Write Data");
   retval = this->read(RESPONSE_HEADER_LEN, buffer, size);
     CHECK_ERROR("Failed to Read Data");
@@ -147,34 +149,32 @@ int Dionysus::wait_for_interrupts(uint32_t timeout){
 }
 
 int Dionysus::ping(){
-  //Assemble a buffer
-  //this->command_header.
   if (this->debug) printf ("Ping...\n");
   int retval = 0;
-  //command_header_t * ch = &this->state->command_header;
   uint32_t len  = populate_ping_command(&this->state->command_header);
-  uint8_t buffer[4096];
-
-  //this->print_status(true, 0);
-  //retval = this->write((uint8_t *) &this->state->command_header, len);
-  retval = this->write(len, NULL, 0);
+  //printf ("Length of write transfer: %d\n", len);
+  //retval = this->write(len, NULL, 0);
+  retval = Dionysus::write_sync((uint8_t *)&this->state->command_header, len);
     CHECK_ERROR("Failed to Write Data");
-  //this->write_sync((uint8_t *) &this->state->command_header, len);
+  //retval = this->read(RESPONSE_HEADER_LEN, NULL, 0);
+  retval = Dionysus::read_sync((uint8_t *)&this->state->response_header, RESPONSE_HEADER_LEN);
+    CHECK_ERROR("Failed to read a Ping Response");
 
-  //this->read_sync(&buffer[0], 4096);
+  if (this->state->response_header.id != ID_RESPONSE){
+    printd("Response from a Ping is incorrect\n");
+    return -1;
+  }
+  if (this->state->response_header.status != ((~PING) & 0xFF)){
+    if (this->debug){
+      printf("Ping Status is incorrect, should be: 0x%02X, instead read: 0x%02X\n",
+          ~PING,
+          this->state->response_header.status);
+    }
+  }
   //this->print_status(true, 0);
-  printd("Wrote ping request, waiting for a reply\n");
-  //while (!this->print_status(true, 0)){
-  //}
-  //printf ("Data ready!\n");
-  retval = this->read(RESPONSE_HEADER_LEN, NULL, 0);
-    CHECK_ERROR("Failed to Read Data");
-  this->print_status(true, 0);
   return 0;
 }
 
 int Dionysus::crash_report(uint32_t *buffer){
   return -1;
 }
-
-
