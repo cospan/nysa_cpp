@@ -10,25 +10,25 @@
 static void print_transfer_status(struct libusb_transfer *transfer){
   printf ("Status: 0x%02X\n", transfer->status);
   switch(transfer->status){
-    LIBUSB_TRANSFER_COMPLETED:
+    case(LIBUSB_TRANSFER_COMPLETED):
       printf ("Transfer Completed\n");
       break;
-    LIBUSB_TRANSFER_ERROR:
+    case(LIBUSB_TRANSFER_ERROR):
       printf ("Transfer Error\n");
       break;
-    LIBUSB_TRANSFER_TIMED_OUT:
+    case(LIBUSB_TRANSFER_TIMED_OUT):
       printf ("Transfer Timed Out\n");
       break;
-    LIBUSB_TRANSFER_CANCELLED:
+    case(LIBUSB_TRANSFER_CANCELLED):
       printf ("Transfer Cancelled\n");
       break;
-    LIBUSB_TRANSFER_STALL:
+    case(LIBUSB_TRANSFER_STALL):
       printf ("Transfer Stalled\n");
       break;
-    LIBUSB_TRANSFER_NO_DEVICE:
+    case(LIBUSB_TRANSFER_NO_DEVICE):
       printf ("Transfer No Device\n");
       break;
-    LIBUSB_TRANSFER_OVERFLOW:
+    case(LIBUSB_TRANSFER_OVERFLOW):
       printf ("Transfer Overflow\n");
       break;
     default:
@@ -111,19 +111,17 @@ void Dionysus::usb_destructor(){
 
 int Dionysus::set_comm_mode(){
   int retval = 0;
-  /*
   retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_RESET);
     CHECK_ERROR("Failed to reset bitmode");
-  */
   retval = ftdi_set_latency_timer(this->ftdi, 2);
     CHECK_ERROR("Failed to set latency");
-  /*
   retval = ftdi_usb_purge_buffers(this->ftdi);
     CHECK_ERROR("Failed to purge buffers");
   retval = ftdi_read_data_set_chunksize(this->ftdi, FTDI_BUFFER_SIZE);
     CHECK_ERROR("Failed to set read chunk size");
   retval = ftdi_write_data_set_chunksize(this->ftdi, FTDI_BUFFER_SIZE);
     CHECK_ERROR("Failed to set write chunk size");
+  /*
   retval = ftdi_setflowctrl(this->ftdi, SIO_DISABLE_FLOW_CTRL);
     CHECK_ERROR("Failed to set flow control to hw");
   Set hardware flow control
@@ -144,6 +142,8 @@ int Dionysus::set_comm_mode(){
                                     0,                            // Size of read
                                     0);                           // Timeout
                                     */
+  retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_SYNCFF);
+    CHECK_ERROR("Failed to reset bitmode");
   //printf ("Index: 0x%02X\n", state->f->index);
   retval = ftdi_usb_purge_buffers(this->ftdi);
     CHECK_ERROR("Failed to purge buffers");
@@ -229,8 +229,24 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
   int retval = 0;
 
   printds("Entered\n");
+  printf("Actual length: %d\n", transfer->actual_length);
   if ((transfer->status == LIBUSB_TRANSFER_COMPLETED) && state->error == 0){
     if (!state->header_found){
+      if (transfer->actual_length <= 2){
+        libusb_fill_bulk_transfer(transfer,
+                                  state->f->usb_dev,
+                                  state->f->out_ep,
+                                  (uint8_t *) &state->response_header,
+                                  RESPONSE_HEADER_LEN + 2,
+                                  //this->ftdi->readbuffer_chunksize,
+                                  dionysus_readstream_cb,
+                                  state,
+                                  1000);
+        transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
+        transfer->flags = 0;
+        retval = libusb_submit_transfer(transfer);
+        return;
+      }
       state->buffer_queue->push(transfer->buffer);
       memcpy((uint8_t *) &state->response_header, buffer, RESPONSE_HEADER_LEN);
       //the response structure should be populated with header data
@@ -328,9 +344,10 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
     }
   }
   else {
-    if (state->error == 0){
-      printf ("Unknown USB Return Status: %d\n", transfer->status);
-    }
+    //if (state->error == 0){
+    print_transfer_status(transfer);
+    //  printf ("Unknown USB Return Status: %d\n", transfer->status);
+    //}
     //Recover the transfer
     state->transfer_queue->push(transfer);
     state->buffer_queue->push(transfer->buffer);
@@ -385,19 +402,19 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
     buf = buffer_queue.front();
     transfer_queue.pop();
     buffer_queue.pop();
-    print_transfer_status(transfer);
+    //print_transfer_status(transfer);
     libusb_fill_bulk_transfer(transfer,
                               this->ftdi->usb_dev,
                               this->ftdi->out_ep,
                               (uint8_t *) &this->state->response_header,
-                              header_len,
+                              header_len + 2,
+                              //this->ftdi->readbuffer_chunksize,
                               dionysus_readstream_cb,
                               this->state,
-                              10000);
-    //print_transfer_status(transfer);
+                              1000);
+    transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
+    transfer->flags = 0;
     retval = libusb_submit_transfer(transfer);
-    //this->print_status(true, 0);
-    //print_transfer_status(transfer);
     if (retval != 0){
       printf ("Error when submitting read transfer: %d\n", retval);
       this->state->error = -2;
@@ -450,14 +467,12 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
       }
     }
   }
-  retval = ftdi_set_bitmode(this->ftdi, 0xFF, BITMODE_SYNCFF);
-  printd("Wait for read to finish\n");
+  //retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_SYNCFF);
+  //printd("Wait for read to finish\n");
   while (!this->state->finished){
-    //XXX: How to wait for an interrupt and then finish this function?
-    //print_transfer_status(transfer);
+    retval = libusb_handle_events_completed(this->ftdi->usb_ctx, NULL);
+    printf(".");
   }
-  //retval = this->Ftdi::Context::set_rts(false);
-  //retval = this->Ftdi::Context::set_dtr(false);
   return size - this->state->size_left;
 }
 
@@ -535,12 +550,6 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
 
   printd ("Write transaction\n");
   retval = this->set_comm_mode();
-  //Set reset so that we don't run into a stutter mode
-  //Purge the buffers
-  retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_RESET);
-    CHECK_ERROR("Failed set bitmode to Reset");
-  retval = ftdi_usb_purge_buffers(this->ftdi);
-    CHECK_ERROR("Failed to purge buffers");
 
   this->state->buffer = buffer;
   this->state->pos = 0;
@@ -564,17 +573,16 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
     }
     transfer = transfer_queue.front();
     transfer_queue.pop();
-    //buf = buffer_queue.front();
-    //buffer_queue.pop();
-    //memcpy(buf, (uint8_t *) &this->state->command_header, header_len);
+    //printf ("Transfer Length: %d\n", header_len);
     libusb_fill_bulk_transfer(transfer,
                             this->ftdi->usb_dev,
                             this->ftdi->in_ep,
                             (uint8_t *) &this->state->command_header,
-                            header_len,
+                            header_len + 2,
                             dionysus_writestream_cb,
                             this->state,
-                            100);
+                            0);
+    transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
     retval = libusb_submit_transfer(transfer);
     if (retval != 0){
       //XXX: Need a way to clean up the USB stack
@@ -633,10 +641,10 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
   while (!this->state->finished){
     //XXX: How to wait for an interrupt and then finish this function?
     if (this->debug){
-      printf (".");
+      //printf (".");
     }
   }
-  retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_RESET);
+  //retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_RESET);
   if (this->debug){
     printf ("Finished %d left of %d\n", this->state->size_left, size);
   }

@@ -123,7 +123,7 @@ struct _state_t {
   command_header_t command_header;
   response_header_t response_header;
 
-  bool finished;
+  int finished;
   bool debug;
   int error;
 };
