@@ -344,11 +344,13 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
   buf_size -= 2;
 
 
+  /*
   printf ("Incomming buffer\n");
   for (int i = 0; i < buf_size; i++){
     printf ("%02X ", buffer[i]);
   }
   printf ("\n");
+  */
 
   //Header Daata
   if (!state->header_found){
@@ -437,8 +439,11 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
       state->d->cancel_all_transfers();
       state->error = retval;
     }
-    state->usb_pos += buf_size;
-    state->usb_size_left -= buf_size;
+    state->usb_pos += BUFFER_SIZE - 2;
+    state->usb_size_left = state->usb_total_size - BUFFER_SIZE - 2;
+    if (state->usb_size_left < 0){
+      state->usb_size_left = 0;
+    }
   }
   else {
     //No need to submit a new USB Transfer
@@ -637,6 +642,7 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
     transfer->flags = 0;
     transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
     retval = libusb_submit_transfer(transfer);
+    printd("Submitted header transfer\n");
     if (retval != 0){
       //XXX: Need a way to clean up the USB stack
       printf ("Error when submitting write transfer: %d\n", retval);
@@ -659,11 +665,10 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
     transfer->flags = 0;
     transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
     retval = libusb_submit_transfer(transfer);
+    printd("Submitted data transfer\n");
     if (retval != 0){
       printf ("Error when submitting write transfer: %d\n", retval);
     }
-    this->cancel_all_transfers();
-    this->state->error = -3;
   }
   while (!this->state->finished){
     //XXX: How to wait for an interrupt and then finish this function?

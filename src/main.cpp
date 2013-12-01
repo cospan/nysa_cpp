@@ -108,13 +108,15 @@ int main(int argc, char **argv){
   args.vendor = DIONYSUS_VID;
   args.product = DIONYSUS_PID;
   args.debug = false;
-  uint8_t buffer[8192];
+  uint8_t* buffer = new uint8_t [8196];
 
   uint32_t num_devices;
   uint32_t device_type = 0;
   uint32_t device_addres = 0;
   uint32_t device_size = 0;
   bool memory_device = false;
+  bool fail = false;
+  uint32_t fail_count = 0;
 
   parse_args(&args, argc, argv);
 
@@ -128,7 +130,7 @@ int main(int argc, char **argv){
     //dionysus.soft_reset();
     dionysus.ping();
     printf ("Reading from the DRT\n");
-    //dionysus.read_periph_data(0, 0, &buffer[0], 32);
+    //dionysus.read_periph_data(0, 0, buffer, 32);
     dionysus.read_drt();
     for (int i = 1; i < dionysus.get_drt_device_count() + 1; i++){
       printf ("Device %d:\n", i);
@@ -144,9 +146,35 @@ int main(int argc, char **argv){
     //  printf ("%02X ", buffer[i]);
     //}
     printf ("\n");
-    //dionysus.read_periph_data(0, 0, &buffer[0], 4096);
-    dionysus.read_periph_data(0, 0, &buffer[0], 8192);
-    
+    //dionysus.read_periph_data(0, 0, buffer, 4096);
+    dionysus.read_periph_data(0, 0, buffer, 8192);
+    delete(buffer);
+
+    printf ("Memory Test! Read and write: 0x%08X Bytes\n", dionysus.get_drt_device_size(3));
+    buffer = new uint8_t[dionysus.get_drt_device_size(3)];
+    for (int i = 0; i < dionysus.get_drt_device_size(3); i++){
+      buffer[i] = i;
+    }
+    dionysus.write_memory(0x00000000, buffer, dionysus.get_drt_device_size(3));
+    for (int i = 0; i < dionysus.get_drt_device_size(3); i++){
+      buffer[i] = 0;
+    }
+    dionysus.read_memory(0x00000000, buffer, dionysus.get_drt_device_size(3));
+    for (int i = 0; i < dionysus.get_drt_device_size(3); i++){
+      if (buffer[i] != i % 256){
+        if (!fail){
+          if (fail_count > 16){
+            fail = true;
+          }
+          fail_count += 1;
+          printf ("Failed @ 0x%08X\n", i);
+          printf ("Value should be: 0x%08X but is: 0x%08X\n", i, buffer[i]);
+        }
+      }
+    }
+
+    delete (buffer);
+
     dionysus.close();
   }
   return 0;
