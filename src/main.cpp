@@ -108,6 +108,13 @@ int main(int argc, char **argv){
   args.vendor = DIONYSUS_VID;
   args.product = DIONYSUS_PID;
   args.debug = false;
+  uint8_t buffer[100];
+
+  uint32_t num_devices;
+  uint32_t device_type = 0;
+  uint32_t device_addres = 0;
+  uint32_t device_size = 0;
+  bool memory_device = false;
 
   parse_args(&args, argc, argv);
 
@@ -120,6 +127,25 @@ int main(int argc, char **argv){
     //dionysus.program_fpga();
     //dionysus.soft_reset();
     dionysus.ping();
+    printf ("Reading from the DRT\n");
+    //dionysus.read_periph_data(0, 0, &buffer[0], 32);
+    dionysus.read_drt();
+    for (int i = 1; i < dionysus.get_drt_device_count() + 1; i++){
+      printf ("Device %d:\n", i);
+      printf ("\tType:\t\t0x%08X\n", dionysus.get_drt_device_type(i));
+      printf ("\tSize:\t\t0x%08X (32-bit values)\n", dionysus.get_drt_device_size(i));
+      printf ("\tAddress:\t0x%08X\n", dionysus.get_drt_device_addr(i));
+      if (dionysus.is_memory_device(i)){
+        printf ("\t\tOn the memory bus\n");
+      }
+    }
+    //Buffer Data:
+    //for (int i = 0; i < 32; i++){
+    //  printf ("%02X ", buffer[i]);
+    //}
+    printf ("\n");
+
+    
     dionysus.close();
   }
   return 0;

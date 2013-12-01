@@ -9,6 +9,10 @@
 #define NUM_TRANSFERS 256
 #define FTDI_BUFFER_SIZE 4096
 #define DEFAULT_BUFFER_SIZE (NUM_TRANSFERS * FTDI_BUFFER_SIZE)
+
+//#define BUFFER_SIZE 510
+#define BUFFER_SIZE FTDI_BUFFER_SIZE
+//#define BUFFER_SIZE DEFAULT_BUFFER_SIZE
 //#define PACKETS_PER_TRANSFER (FTID_BUFFER_SIZE / 512)
 
 #define ID    0xCD
@@ -23,7 +27,8 @@
 #define COMMAND_HEADER_LEN 9
 
 #define ID_RESPONSE 0xDC
-#define RESPONSE_HEADER_LEN 5
+#define PING_RESPONSE_HEADER_LEN 5
+#define RESPONSE_HEADER_LEN 9
 #define RESPONSE_INT_HEADER_LEN 13
 
 
@@ -102,14 +107,27 @@ struct _state_t {
   std::queue<struct libusb_transfer *> *transfer_queue;
   std::queue<uint8_t *> *buffer_queue;
   //Context of FTDI to continue transactions
-  struct ftdi_context * f;
+  struct libusb_context * usb_ctx;
+  struct libusb_device_handle * usb_dev;
+  int    in_ep;
+  int    out_ep;
+
   uint32_t transfer_index;
 
   //Dionysus Memory Buffer used to store data
   uint8_t * buffer;
-  uint32_t size_left;
-  uint32_t size;
-  uint32_t pos;
+  uint32_t buffer_size;
+  uint32_t buffer_pos;
+
+  uint32_t header_pos;
+  uint32_t header_size;
+
+  uint32_t usb_total_size;
+  int32_t  usb_size_left;
+  uint32_t usb_pos;
+  //USB Total size position
+  uint32_t usb_actual_pos;
+
 
   uint32_t read_data_count;
   uint32_t read_dev_addr;

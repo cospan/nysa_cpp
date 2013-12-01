@@ -16,9 +16,13 @@ do{                                               \
 
 class Nysa {
   private:
+    uint8_t * drt;
     bool debug;
-
     int parse_drt();
+
+    //DRT Values
+    int num_devices;
+    uint8_t version;
 
   public:
     Nysa (bool debug = false);
@@ -28,17 +32,17 @@ class Nysa {
     int close();
 
     //Low Level interface
-    int write_memory(uint32_t address, uint8_t *buffer, uint32_t size);
-    int read_memory(uint32_t address, uint8_t *buffer, uint32_t size);
+    virtual int write_memory(uint32_t address, uint8_t *buffer, uint32_t size);
+    virtual int read_memory(uint32_t address, uint8_t *buffer, uint32_t size);
 
-    int write_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
-    int read_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
+    virtual int write_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
+    virtual int read_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
 
-    int wait_for_interrupts(uint32_t timeout);
+    virtual int wait_for_interrupts(uint32_t timeout);
 
-    int ping();
+    virtual int ping();
 
-    int crash_report(uint32_t *buffer);
+    virtual int crash_report(uint32_t *buffer);
 
     //Helper Functions
     int write_register(uint32_t dev_addr, uint32_t reg_addr, uint32_t data);
@@ -51,13 +55,15 @@ class Nysa {
     int pretty_print_drt();
     int read_drt();
 
-    int get_drt_version(uint32_t version);
+    int get_drt_version();
 
-    int get_drt_device_count(int *count);
-    int get_drt_device_type(uint32_t index, uint32_t *type);
-    int is_memory_device(uint32_t index, bool *memory_bus);
-    int get_drt_device_size(uint32_t index, uint32_t *size);
-    int get_drt_device_flags(uint32_t index, uint32_t *flags);
+    int get_drt_device_count();
+    uint32_t get_drt_device_type(uint32_t index);
+    bool is_memory_device(uint32_t index);
+    uint32_t get_drt_device_size(uint32_t index);
+
+    int get_drt_device_flags(uint32_t index, uint16_t *nysa_flags, uint16_t *dev_flags);
+    uint32_t get_drt_device_addr(uint32_t index);
 
 
     int pretty_print_crash_report();

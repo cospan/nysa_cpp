@@ -49,14 +49,14 @@ static uint32_t populate_write_mem_command(command_header_t* ch, uint32_t dword_
 static uint32_t populate_read_periph_command(command_header_t * ch, uint32_t dword_len, uint8_t dev_addr, uint32_t reg_address){
   ch->id = ID;
   ch->command = READ;
-  ch->data_count[2] = (dword_len >> 16) & 0xFF;
+  ch->data_count[0] = (dword_len >> 16) & 0xFF;
   ch->data_count[1] = (dword_len >> 8 ) & 0xFF;
-  ch->data_count[0] = (dword_len      ) & 0xFF;
+  ch->data_count[2] = (dword_len      ) & 0xFF;
 
   ch->address.dev_addr = dev_addr;
-  ch->address.reg_addr[2] = (reg_address >> 16) & 0xFF;
+  ch->address.reg_addr[0] = (reg_address >> 16) & 0xFF;
   ch->address.reg_addr[1] = (reg_address >> 8 ) & 0xFF;
-  ch->address.reg_addr[0] = (reg_address      ) & 0xFF;
+  ch->address.reg_addr[2] = (reg_address      ) & 0xFF;
   ch->data.data = 0x00;
 
   return COMMAND_HEADER_LEN;
@@ -160,7 +160,7 @@ int Dionysus::ping(){
   //retval = Dionysus::read_sync((uint8_t *)&this->state->response_header, RESPONSE_HEADER_LEN);
   //  CHECK_ERROR("Failed to read a Ping Response");
 
-  retval = Dionysus::read(RESPONSE_HEADER_LEN, NULL, 0);
+  retval = Dionysus::read(PING_RESPONSE_HEADER_LEN, NULL, 0);
     CHECK_ERROR("Failed to read a Ping Response");
 
   if (this->state->response_header.id != ID_RESPONSE){

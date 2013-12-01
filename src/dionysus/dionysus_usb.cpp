@@ -5,7 +5,62 @@
 #include <ftdi.h>
 #include <cstdlib>
 #include <libusb.h>
+#include <malloc.h>
 
+static int check_response(state_t *state, response_header_t * response){
+  int retval = 0;
+  printf ("Response\n");
+  printf ("\tID: %02X\n", response->id);
+  printf ("\tCommand Status: %02X\n", response->status);
+  if (state->response_header.id != ID_RESPONSE){
+    //Fail, ID does not match
+    if (state->debug){
+      printf ("ID Response != 0x%0X: %02X\n", ID_RESPONSE, state->response_header.id);
+    }
+    retval = -1;
+  }
+  //XXX: how to check the command response
+  else if (state->response_header.status != ((~state->command_header.command) & 0xFF)){
+    if (state->debug){
+      printf ("Status Read != ~Command\n");
+    }
+    retval = -2;
+  }
+  if (state->command_header.command == PING){
+    return retval;
+  }
+  if (state->command_header.command == WRITE){
+    return retval;
+  }
+  state->read_data_count =  state->response_header.data_count[0] << 16;
+  state->read_data_count |= state->response_header.data_count[1] << 8;
+  state->read_data_count |= state->response_header.data_count[2];
+  if (state->debug){
+    printf ("Data Count (32-bit Data words): 0x%08X\n", state->read_data_count);
+  }
+
+  if (state->mem_response){
+    state->read_mem_addr =  state->response_header.address.mem_addr[0] << 24;
+    state->read_mem_addr |= state->response_header.address.mem_addr[1] << 16;
+    state->read_mem_addr |= state->response_header.address.mem_addr[2] << 8;
+    state->read_mem_addr |= state->response_header.address.mem_addr[3];
+    if (state->debug){
+      printf ("Memory Access @ 0x%08X\n", state->read_mem_addr);
+    }
+    retval = -3;
+  }
+  else {
+    state->read_dev_addr = state->response_header.address.dev_addr;
+    state->read_reg_addr = state->response_header.address.reg_addr[0] << 16;
+    state->read_reg_addr |= state->response_header.address.reg_addr[1] << 8;
+    state->read_reg_addr |= state->response_header.address.reg_addr[2];
+    if (state->debug){
+      printf ("Peripheral Access: Device: 0x%02X Register: 0x%06X\n", state->read_dev_addr, state->read_reg_addr);
+    }
+    retval = -4;
+  }
+  return retval;
+}
 
 static void print_transfer_status(struct libusb_transfer *transfer){
   printf ("Status: 0x%02X\n", transfer->status);
@@ -38,27 +93,44 @@ static void print_transfer_status(struct libusb_transfer *transfer){
 
 void Dionysus::usb_constructor(){
   //Initialize the read structure
-  this->state = new state_t;
-  this->state->transfer_index = 0;
-  this->state->f = this->ftdi;
-  this->state->finished = true;
-  this->state->error = 0;
-  this->state->buffer = NULL;
-  this->state->size_left = 0;
-  this->state->size = 0;
-  this->state->pos = 0;
-  this->state->transfer_queue = &this->transfer_queue;
-  this->state->buffer_queue = &this->buffer_queue;
-  this->state->d = this;
-  this->state->debug = debug;
+  this->state                  = new state_t;
+
+  this->state->transfer_index  = 0;
+  this->state->usb_ctx         = NULL;
+  this->state->usb_dev         = NULL;
+  this->state->in_ep           = 0;
+  this->state->out_ep          = 0;
+  this->state->finished        = true;
+  this->state->error           = 0;
+
+  //User Data
+  this->state->buffer          = NULL;
+  this->state->buffer_pos      = 0;
+  this->state->buffer_size     = 0;
+
+  this->state->header_pos      = 0;
+  this->state->header_size     = 0;
+
+  //USB Transfer position
+  this->state->usb_total_size  = 0;
+  this->state->usb_size_left   = 0;
+  this->state->usb_pos         = 0;
+  this->state->usb_actual_pos  = 0;
+
+  //Transfer and Buffer Queue
+  this->state->transfer_queue  = &this->transfer_queue;
+  this->state->buffer_queue    = &this->buffer_queue;
+
+  this->state->d               = this;
+  this->state->debug           = debug;
   this->state->read_data_count = 0;
-  this->state->read_dev_addr = 0;
-  this->state->read_reg_addr = 0;
-  this->state->read_mem_addr = 0;
-  this->state->mem_response = false;
+  this->state->read_dev_addr   = 0;
+  this->state->read_reg_addr   = 0;
+  this->state->read_mem_addr   = 0;
+  this->state->mem_response    = false;
 
   for (int i = 0; i < NUM_TRANSFERS; i++){
-    uint8_t * buffer = new uint8_t[FTDI_BUFFER_SIZE];
+    uint8_t * buffer = new uint8_t[BUFFER_SIZE + 2]; //Add two for the modem status
     this->buffer_queue.push(buffer);
     this->buffers.push(buffer);
     struct libusb_transfer *transfer = NULL;
@@ -80,8 +152,13 @@ int Dionysus::usb_open(int vendor, int product){
   if (this->debug) printf ("Dionysus: Open a context\n");
   retval = ftdi_usb_open(this->ftdi, vendor, product);
     CHECK_ERROR("Failed to open FTDI");
+  this->reset();
   this->usb_is_open = true;
   retval = Dionysus::set_comm_mode();
+  this->state->usb_ctx           = this->ftdi->usb_ctx;
+  this->state->usb_dev           = this->ftdi->usb_dev;
+  this->state->in_ep             = this->ftdi->in_ep;
+  this->state->out_ep            = this->ftdi->out_ep;
   return retval;
 }
 
@@ -131,20 +208,8 @@ int Dionysus::set_comm_mode(){
   retval = this->Ftdi::Context::flush(Context::Input | Context::Output);
     CHECK_ERROR("Failed to purge buffers");
   */
-
-  /*
-  retval = libusb_control_transfer( this->state->f->usb_dev,      // Context
-                                    FTDI_DEVICE_OUT_REQTYPE,      // Mix of VID:PID out Request
-                                    SIO_SET_FLOW_CTRL_REQUEST,    // Command to Execute
-                                    (SIO_RTS_CTS_HS | INTERFACE_A),   // Value
-                                    1,                            // Index
-                                    NULL,                         // uint8_t buffer
-                                    0,                            // Size of read
-                                    0);                           // Timeout
-                                    */
   retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_SYNCFF);
     CHECK_ERROR("Failed to reset bitmode");
-  //printf ("Index: 0x%02X\n", state->f->index);
   retval = ftdi_usb_purge_buffers(this->ftdi);
     CHECK_ERROR("Failed to purge buffers");
   this->comm_mode = true;
@@ -225,255 +290,259 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
   state_t * state = (state_t *) transfer->user_data;
   uint32_t buf_size = 0;
   uint8_t *buffer = transfer->buffer;
+  uint32_t cpy_size = 0;
   uint16_t status = 0;
   int retval = 0;
 
   printds("Entered\n");
-  printf("Actual length: %d\n", transfer->actual_length);
-  if ((transfer->status == LIBUSB_TRANSFER_COMPLETED) && state->error == 0){
-    if (!state->header_found){
-      if (transfer->actual_length <= 2){
-        libusb_fill_bulk_transfer(transfer,
-                                  state->f->usb_dev,
-                                  state->f->out_ep,
-                                  (uint8_t *) &state->response_header,
-                                  RESPONSE_HEADER_LEN + 2,
-                                  //this->ftdi->readbuffer_chunksize,
-                                  dionysus_readstream_cb,
-                                  state,
-                                  1000);
-        transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
-        transfer->flags = 0;
-        retval = libusb_submit_transfer(transfer);
-        return;
-      }
-      state->buffer_queue->push(transfer->buffer);
-      memcpy((uint8_t *) &state->response_header, buffer, RESPONSE_HEADER_LEN);
-      //the response structure should be populated with header data
-      //If this is a ping or a write then we are done, and we can exit immediately
-      printf ("Incomming buffer\n");
-      //XXX: state->d->print_status(false, state->response_header.modem_status);
-      //for (int i = 0; i < RESPONSE_HEADER_LEN; i++){
-      for (int i = 0; i < 512; i++){
-        printf ("%02X ", buffer[i]);
-      }
-      printf ("\n");
-      if (state->response_header.id != ID_RESPONSE){
-        //Fail, ID does not match
-        printf ("ID Response != 0x%0X: %02X\n", ID_RESPONSE, state->response_header.id);
-        //state->d->cancel_all_transfers();
-      }
-      //XXX: how to check the command response
-      else if (state->response_header.status != ~state->command_header.command){
-        printf ("Status Read != ~Command\n");
-        //state->d->cancel_all_transfers();
-      }
-      if (state->debug){
-        printf ("~status: 0x%02X\n", ~state->response_header.status);
-      }
-      state->read_data_count =  state->response_header.data_count[2] << 16;
-      state->read_data_count |= state->response_header.data_count[1] << 8;
-      state->read_data_count |= state->response_header.data_count[0];
-      if (state->debug){
-        printf ("Data Count (32-bit Data words): 0x%02X\n", state->read_data_count);
-      }
+  buf_size = transfer->actual_length;
+  printf("Requested Length: %d\n", transfer->length);
+  printf("Actual length: %d\n", buf_size);
 
-      if (state->mem_response){
-        state->read_mem_addr =  state->response_header.address.mem_addr[3] << 24;
-        state->read_mem_addr |= state->response_header.address.mem_addr[2] << 16;
-        state->read_mem_addr |= state->response_header.address.mem_addr[1] << 8;
-        state->read_mem_addr |= state->response_header.address.mem_addr[0];
-        if (state->debug){
-          printf ("Memory Access @ 0x%08X\n", state->read_mem_addr);
-        }
+  if ((transfer->status != LIBUSB_TRANSFER_COMPLETED) || (state->error != 0)){
+    if (state->debug){
+      //Error When reading from the transfer QUEUE
+      //No more data to send, recover this transfer
+      if (state->error == 0){
+        printds ("Error conditions occured during transfer!\n");
+        print_transfer_status(transfer);
       }
-      else {
-        state->read_dev_addr = state->response_header.address.dev_addr;
-        state->read_reg_addr = state->response_header.address.reg_addr[2] << 16;
-        state->read_reg_addr |= state->response_header.address.reg_addr[1] << 8;
-        state->read_reg_addr |= state->response_header.address.reg_addr[0];
-        if (state->debug){
-          printf ("Peripheral Access: Device: 0x%02X Register: 0x%02X\n", state->read_dev_addr, state->read_reg_addr);
-        }
-      }
+    }
+    state->buffer_queue->push(transfer->buffer);
+    if (state->transfer_queue->size() == NUM_TRANSFERS){
+      //We're done!
+      state->finished = true;
+    }
+    //Put the buffer back into the queue too
+    state->buffer_queue->push(transfer->buffer);
+    return;
+  }
 
-      state->header_found = true;
-      if (state->size_left == 0){
-        state->transfer_queue->push(transfer);
-      }
+  //USB Transfer is good!
+
+  //Waiting for the header
+  if (buf_size <= 2){
+    printds("Small packet ( <= 2 )\n");
+    //we didn't get data back, we need to submit a new one
+    libusb_fill_bulk_transfer(transfer,
+                              state->usb_dev,
+                              state->out_ep,
+                              transfer->buffer,
+                              BUFFER_SIZE + 2,
+                              dionysus_readstream_cb,
+                              state,
+                              1000);
+    transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
+    transfer->flags = 0;
+    retval = libusb_submit_transfer(transfer);
+    return;
+  }
+  //Buffer has more than the modem status
+  //Go to the buffer position after the modem status
+  buffer = &buffer[2];
+  buf_size -= 2;
+
+
+  printf ("Incomming buffer\n");
+  for (int i = 0; i < buf_size; i++){
+    printf ("%02X ", buffer[i]);
+  }
+  printf ("\n");
+
+  //Header Daata
+  if (!state->header_found){
+    printds("Reading header data\n");
+    if (buf_size >= state->header_size){
+      cpy_size = state->header_size;
     }
     else {
-      //Not Header Data
-      if (state->size_left > 0){
-        //Still more data to send
-        if (state->size_left > state->f->max_packet_size){
-          //Can't send all the data yet
-          buf_size = state->f->max_packet_size;
-        }
-        else {
-          //Sending the reset of the data
-          buf_size = state->size_left;
-        }
-        libusb_fill_bulk_transfer(transfer,
-                                  state->f->usb_dev,
-                                  state->f->out_ep,
-                                  &state->buffer[state->pos],
-                                  buf_size,
-                                  dionysus_readstream_cb,
-                                  state,
-                                  0);
-        //Update the position and size left
-        state->size_left -= buf_size;
-        state->pos += buf_size;
-        retval = libusb_submit_transfer(transfer);
-        if (retval != 0){
-          printf ("Failed to submit transfer: %d\n", retval);
-          //Put the transfer back into the empty queue
-          state->transfer_queue->push(transfer);
-          state->error = retval;
-        }
-      }
-      else {
-        //No more data to send, recover this transfer
-        state->transfer_queue->push(transfer);
-        if (state->transfer_queue->size() == NUM_TRANSFERS){
-          //We're done!
-          state->finished = true;
-        }
-      }
+      cpy_size = buf_size;
+    }
+    memcpy(((uint8_t *)&state->response_header) + state->header_pos, buffer, cpy_size);
+    state->header_pos += cpy_size;
+    state->usb_actual_pos += cpy_size;
+    if (state->header_pos >= state->header_size){
+      //the response structure should be populated with header data
+      //If this is a ping or a write then we are done, and we can exit immediately
+      retval = check_response(state, &state->response_header);
+      state->header_found = true;
+    }
+    buffer = &buffer[cpy_size];
+    buf_size -= cpy_size;
+  }
+
+  //Buffer Data
+  if ((buf_size > 0) && ((state->buffer_size - state->buffer_pos) > 0)){
+    if (state->debug){
+      printds("reading buffer data\n");
+    }
+    if (buf_size >= (state->buffer_size - state->buffer_pos)){
+      //there is a chance the buffer size might be bigger than the data
+      cpy_size = (state->buffer_size - state->buffer_pos);
+    }
+    else {
+      //the incomming data is smaller or equal to the size of the data
+      cpy_size = buf_size;
+    }
+    //Copy any remaining data to the output buffer
+    memcpy(&state->buffer[state->buffer_pos], buffer, cpy_size);
+    state->buffer_pos += cpy_size;
+    state->usb_actual_pos += cpy_size;
+    buf_size -= cpy_size;
+  }
+
+  //Calculate our USB position
+  state->usb_actual_pos += transfer->actual_length - 2;
+  if ((transfer->actual_length - 2) < state->usb_total_size){
+    //Because everything was sent in increments of chunksizes we need to see if the USB returned
+    //something smaller, if so we might need to submit a new packet
+    state->usb_pos = state->usb_pos - (BUFFER_SIZE - (transfer->actual_length - 2));
+    state->usb_size_left = state->usb_total_size - state->usb_pos;
+    if (state->usb_size_left < 0){
+      state->usb_size_left = 0;
+    }
+    if (state->debug){
+      printf("%s(): Request %d more bytes from USB\n", __func__, state->usb_size_left);
     }
   }
+
+  //Check if we need to request more data
+  if (state->usb_size_left > 0){
+    printds("Submit a new transfer in read callback\n");
+    libusb_fill_bulk_transfer(transfer,
+                              state->usb_dev,
+                              state->out_ep,
+                              transfer->buffer,
+                              BUFFER_SIZE + 2, //Add two for the modem status
+                              dionysus_readstream_cb,
+                              state,
+                              1000);
+    //Update the position and size left
+    transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
+    transfer->flags = 0;
+    retval = libusb_submit_transfer(transfer);
+    if (retval != 0){
+      printf ("Failed to submit transfer: %d\n", retval);
+      //Put the transfer back into the empty queue
+      state->transfer_queue->push(transfer);
+      state->buffer_queue->push(buffer);
+      state->d->cancel_all_transfers();
+      state->error = retval;
+    }
+    state->usb_pos += buf_size;
+    state->usb_size_left -= buf_size;
+  }
   else {
-    //if (state->error == 0){
+    //No need to submit a new USB Transfer
+    printds("no need to submit a new transfer\n");
     print_transfer_status(transfer);
-    //  printf ("Unknown USB Return Status: %d\n", transfer->status);
-    //}
-    //Recover the transfer
     state->transfer_queue->push(transfer);
     state->buffer_queue->push(transfer->buffer);
-    state->error = -1;
+    state->error = 0;
   }
+
+  //Check to see if we are done
   if (state->transfer_queue->size() == NUM_TRANSFERS){
+    //All transfer queues are recovered!
     //We're done!
     state->finished = true;
   }
-
 }
 
 int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
 
-  int max_packet_size = this->ftdi->max_packet_size;
   struct libusb_transfer * transfer;
-  //int packets_per_transfer = PACKETS_PER_TRANSFER;
-  //4096 is the buffer size we set inside the FTDI Chip so we are looking to fill that up
-  int packets_per_transfer = FTDI_BUFFER_SIZE / max_packet_size;
   uint32_t buf_size = 0;
   uint8_t * buf = NULL;
   int retval = 0;
 
-  uint32_t max_buf_size = packets_per_transfer * max_packet_size;
-  //Go into reset to set everything up before the first transaction otherwise the SYNC FF
-  //will stutter
   printd("Entered\n");
-  //retval = ftdi_set_bitmode(this->ftdi, 0xFF, BITMODE_RESET);
-  //  CHECK_ERROR("Failed to reset Bitmode");
 
-  this->state->buffer          = buffer;
-  this->state->pos             = 0;
-  this->state->size_left       = size;
-  this->state->size            = size;
-  this->state->error           = 0;
-  this->state->header_found    = false;
-  this->state->read_data_count = 0;
-  this->state->read_dev_addr   = 0;
-  this->state->read_reg_addr   = 0;
-  this->state->read_mem_addr   = 0;
-  this->state->mem_response    = ((this->state->command_header.command & MEM_FLAG) > 0);
-  this->state->finished        = false;
+  this->state->buffer           = buffer;
+  this->state->buffer_pos       = 0;
+  this->state->buffer_size      = size;
+
+  //Total size that will be read from the chip
+  this->state->usb_total_size   = size + header_len;
+  //size of the read that is left
+  this->state->usb_size_left    = 0;
+  //current position of the request
+  this->state->usb_pos          = 0;
+  //current position of the data read back from the device
+  this->state->usb_actual_pos   = 0;
+
+  this->state->header_pos       = 0;
+
+  this->state->error            = 0;
+  this->state->header_found     = false;
+  this->state->read_data_count  = 0;
+  this->state->read_dev_addr    = 0;
+  this->state->read_reg_addr    = 0;
+  this->state->read_mem_addr    = 0;
+  this->state->mem_response     = ((this->state->command_header.command & MEM_FLAG) > 0);
+  this->state->finished         = false;
 
   if (transfer_queue.empty()){
     printf ("Transfer queue empty!\n");
     return -5;
   }
-  if (header_len > 0){
-    printd ("Sending header\n");
-    //printf ("Length of transfer queue: %ld\n", transfer_queue.size());
-    transfer = transfer_queue.front();
-    buf = buffer_queue.front();
-    transfer_queue.pop();
-    buffer_queue.pop();
-    //print_transfer_status(transfer);
-    libusb_fill_bulk_transfer(transfer,
-                              this->ftdi->usb_dev,
-                              this->ftdi->out_ep,
-                              (uint8_t *) &this->state->response_header,
-                              header_len + 2,
-                              //this->ftdi->readbuffer_chunksize,
-                              dionysus_readstream_cb,
-                              this->state,
-                              1000);
-    transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
-    transfer->flags = 0;
-    retval = libusb_submit_transfer(transfer);
-    if (retval != 0){
-      printf ("Error when submitting read transfer: %d\n", retval);
-      this->state->error = -2;
-    }
-    printd ("header transfer submitted\n");
-  }
-
   //setup a list of transfer_queue
-  if (size > 0){
+  this->state->usb_size_left = this->state->usb_total_size;
+  if (this->state->usb_total_size > 0){
     printd("Requesting data in the read\n");
     while (!transfer_queue.empty()){
-      this->state->size_left = size - this->state->pos;
-      if (this->state->size_left >= max_packet_size){
-        //The packet size is larger or equal to than the size of the BULK transfer packet
-        buf_size = max_packet_size;
-        this->state->size_left -= buf_size;
-      }
-      else {
-        //The packet size is smaller than the size of the BULK transfer packet
-        buf_size = this->state->size_left;
-        this->state->size_left = 0;
-      }
-      transfer = transfer_queue.front();
-      buf = buffer_queue.front();
-      transfer_queue.pop();
-      buffer_queue.pop();
-      print_transfer_status(transfer);
+      transfer = this->transfer_queue.front();
+      buf = this->buffer_queue.front();
+      printf ("Buffer: %p\n", buf);
+      this->transfer_queue.pop();
+      this->buffer_queue.pop();
       libusb_fill_bulk_transfer(transfer,
-                                this->state->f->usb_dev,
-                                this->state->f->out_ep,
-                                &state->buffer[state->pos],
-                                buf_size,
+                                this->ftdi->usb_dev,
+                                this->ftdi->out_ep,
+                                buf,
+                                BUFFER_SIZE + 2,
+                                //max_packet_size + 2, //Add two for the modem status
+
+                                /*  Instead of only asking for the size we want we submit full packets
+                                 *  this way if the FTDI chip only sends back modem status we can
+                                 *  resubmit without having to figure out how large a packet should be send
+                                 *  the FTDI chip will only send back the size that it has, so if we have a
+                                 *  packet smaller than the maximum in it, we wont be waiting indefinetly
+                                 * */
                                 dionysus_readstream_cb,
                                 this->state,
                                 1000);
-      print_transfer_status(transfer);
-      this->state->pos += buf_size;
 
+      transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
+      transfer->flags = 0;
+      printd ("Submit transfer\n");
       retval = libusb_submit_transfer(transfer);
+      printd ("transfer submitted\n");
       if (retval != 0){
-        //XXX: Need a way to clean up the USB stack
+        //Clean up the USB stack by telling everything to cancel!
+        //This will return everything back in the callback, so we still need to wait for it finish
+        this->cancel_all_transfers();
         printf ("Error when submitting read transfer: %d\n", retval);
         this->state->error = -2;
         break;
       }
 
+      this->state->usb_pos += BUFFER_SIZE;
+      this->state->usb_size_left = this->state->usb_total_size - this->state->usb_pos;
+      if (this->state->usb_size_left < 0){
+        this->state->usb_size_left = 0;
+      }
       //Check if there is more data to write
-      if (this->state->size_left == 0){
+      if (this->state->usb_size_left == 0){
         break;
       }
     }
   }
-  //retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_SYNCFF);
-  //printd("Wait for read to finish\n");
   while (!this->state->finished){
     retval = libusb_handle_events_completed(this->ftdi->usb_ctx, NULL);
     printf(".");
   }
-  return size - this->state->size_left;
+  return this->state->usb_total_size - this->state->usb_size_left;
 }
 
 static void dionysus_writestream_cb(struct libusb_transfer *transfer){
@@ -481,88 +550,61 @@ static void dionysus_writestream_cb(struct libusb_transfer *transfer){
   uint32_t buf_size = 0;
   int retval = 0;
   printds ("Entered\n");
-  if ((transfer->status == LIBUSB_TRANSFER_COMPLETED) && state->error == 0){
-    //printf ("Transfer Completed with Status: 0x%02X\n", transfer->status);
-    if (state->size_left > 0){
-      //more data to send
-      if (state->size_left > state->f->max_packet_size){
-        buf_size = state->f->max_packet_size;
-      }
-      else {
-        //Sending the rest of the data
-        buf_size = state->size_left;
-      }
-
-      libusb_fill_bulk_transfer(transfer,
-                                state->f->usb_dev,
-                                state->f->in_ep,
-                                &state->buffer[state->pos],
-                                buf_size,
-                                dionysus_writestream_cb,
-                                state,
-                                0);
-      state->size_left -= buf_size;
-      state->pos += buf_size;
-      retval = libusb_submit_transfer(transfer);
-      if (retval != 0){
-        printf ("Failed to submit transfer: %d\n", retval);
-        //Put the transfer back into the empty queue
-        state->transfer_queue->push(transfer);
-        state->error = retval;
-        state->d->cancel_all_transfers();
-      }
-    }
-    else {
-      //No more data to send, recover this transfer
-      state->transfer_queue->push(transfer);
-      if (state->transfer_queue->size() == NUM_TRANSFERS){
-        //We're Done
-        printds("Finished!\n");
-        state->finished = true;
-      }
-    }
-  }
-  else {
+  if ((transfer->status != LIBUSB_TRANSFER_COMPLETED) || (state->error != 0)){
     if (state->error == 0){
-      printf ("Unknown USB Return Status: %d\n", transfer->status);
+      if (state->debug){
+        print_transfer_status(transfer);
+      }
       state->d->cancel_all_transfers();
     }
     //Transfer Failed!
-    state->transfer_queue->push(transfer);
-    if (state->transfer_queue->size() == NUM_TRANSFERS){
-      //We're done!
-      printds("Finished!\n");
-      state->finished = true;
-    }
     state->error = -1;
+    return;
+  }
+  state->transfer_queue->push(transfer);
+  if (state->transfer_queue->size() == NUM_TRANSFERS){
+    //We're Done
+    printds("Finished!\n");
+    state->finished = true;
   }
 }
 
 int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
-  int max_packet_size = this->ftdi->max_packet_size;
   struct libusb_transfer * transfer;
-  int packets_per_transfer = FTDI_BUFFER_SIZE / max_packet_size;
   uint32_t buf_size = 0;
   uint8_t * buf = NULL;
   int retval = 0;
-
-  uint32_t max_buf_size = packets_per_transfer * max_packet_size;
+  uint32_t buffer_size_left = 0;
 
   printd ("Write transaction\n");
   retval = this->set_comm_mode();
 
-  this->state->buffer = buffer;
-  this->state->pos = 0;
-  this->state->size_left = size;
-  this->state->size = size;
-  this->state->error = 0;
-  this->state->header_found = false; // this isn't needed for a write
-  this->state->finished = false;
+  this->state->buffer           = buffer;
+  this->state->buffer_pos       = 0;
+  this->state->buffer_size      = size;
+
+  //Total size that will be read from the chip
+  this->state->usb_total_size   = size + header_len;
+  //size of the read that is left
+  this->state->usb_size_left    = 0;
+  //current position of the request
+  this->state->usb_pos          = 0;
+  //current position of the data read back from the device
+  this->state->usb_actual_pos   = 0;
+
+  this->state->header_pos       = 0;
+  this->state->header_size      = header_len;
+
+  this->state->error            = 0;
+  this->state->header_found     = false; // this isn't needed for a write
+  this->state->finished         = false;
   //Setup a list of transfers
   if (transfer_queue.empty()){
     printf ("Transfer queue empty!\n");
     return -5;
   }
+
+  //Send the header
   if (header_len > 0){
     if (this->debug){
       printd ("Header:\n");
@@ -578,78 +620,54 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
                             this->ftdi->usb_dev,
                             this->ftdi->in_ep,
                             (uint8_t *) &this->state->command_header,
-                            header_len + 2,
+                            header_len,
                             dionysus_writestream_cb,
                             this->state,
                             0);
+    transfer->flags = 0;
     transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
     retval = libusb_submit_transfer(transfer);
     if (retval != 0){
       //XXX: Need a way to clean up the USB stack
       printf ("Error when submitting write transfer: %d\n", retval);
-      this->state->error = -3;
       this->cancel_all_transfers();
+      this->state->error = -3;
     }
+    this->state->usb_pos += header_len;
   }
-  //Send the data in this write transfer
-  while (!transfer_queue.empty() && (this->state->error == 0) && (size > 0)){
-    this->state->size_left = size - this->state->pos;
-    if (this->state->size_left >= max_packet_size){
-      //Packet size is larger than the maximum packet size I can send to USB
-      buf_size = max_packet_size;
-      this->state->size_left -= buf_size;
-    }
-    else {
-      //Packet size is smaller than the size of a BULK transfer packet
-      buf_size = this->state->size_left;
-      this->state->size_left = 0;
-    }
+  if (size > 0){
     transfer = transfer_queue.front();
     transfer_queue.pop();
     libusb_fill_bulk_transfer(transfer,
-                              this->state->f->usb_dev,
-                              this->state->f->in_ep,
-                              &buffer[this->state->pos],
-                              buf_size,
+                              this->ftdi->usb_dev,
+                              this->ftdi->in_ep,
+                              buffer,
+                              size,
                               dionysus_writestream_cb,
                               this->state,
                               0);
-    this->state->pos += buf_size;
+    transfer->flags = 0;
+    transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
     retval = libusb_submit_transfer(transfer);
     if (retval != 0){
-      //XXX: Need a way to clean up the USB stack
       printf ("Error when submitting write transfer: %d\n", retval);
-      this->state->error = -3;
-      this->cancel_all_transfers();
-      break;
     }
-    //Check if we have filld all the data in the buffer
-    if (this->state->size_left == 0){
-      break;
-    }
-  }
-  printd ("Setting Synchronous FIFO\n");
-  retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_SYNCFF);
-    CHECK_ERROR("Failed set bitmode to Synchronous FIFO");
-
-  if (retval != 0){
-    this->state->error = -4;
     this->cancel_all_transfers();
-    printf ("Failed to set Synchronous FIFO, Critical ERRorRORoooRooRR!\n");
-    printf ("Cancelling all transfers\n");
+    this->state->error = -3;
   }
   while (!this->state->finished){
     //XXX: How to wait for an interrupt and then finish this function?
+    retval = libusb_handle_events_completed(this->ftdi->usb_ctx, NULL);
     if (this->debug){
       //printf (".");
     }
   }
   //retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_RESET);
   if (this->debug){
-    printf ("Finished %d left of %d\n", this->state->size_left, size);
+    printf ("Finished %d left of %d\n", this->state->usb_size_left, size);
   }
   //this->print_status(true, 0);
-  return size - this->state->size_left;
+  return size - this->state->usb_size_left;
 }
 
 int Dionysus::write_sync(uint8_t *buffer, uint16_t size){
