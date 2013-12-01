@@ -130,7 +130,8 @@ void Dionysus::usb_constructor(){
   this->state->mem_response    = false;
 
   for (int i = 0; i < NUM_TRANSFERS; i++){
-    uint8_t * buffer = new uint8_t[BUFFER_SIZE + 2]; //Add two for the modem status
+    //uint8_t * buffer = new uint8_t[BUFFER_SIZE + 2]; //Add two for the modem status
+    uint8_t * buffer = new uint8_t[BUFFER_SIZE]; //Add two for the modem status
     this->buffer_queue.push(buffer);
     this->buffers.push(buffer);
     struct libusb_transfer *transfer = NULL;
@@ -194,19 +195,18 @@ int Dionysus::set_comm_mode(){
     CHECK_ERROR("Failed to set latency");
   retval = ftdi_usb_purge_buffers(this->ftdi);
     CHECK_ERROR("Failed to purge buffers");
+  /*
   retval = ftdi_read_data_set_chunksize(this->ftdi, FTDI_BUFFER_SIZE);
     CHECK_ERROR("Failed to set read chunk size");
   retval = ftdi_write_data_set_chunksize(this->ftdi, FTDI_BUFFER_SIZE);
     CHECK_ERROR("Failed to set write chunk size");
+  */
   /*
   retval = ftdi_setflowctrl(this->ftdi, SIO_DISABLE_FLOW_CTRL);
     CHECK_ERROR("Failed to set flow control to hw");
   Set hardware flow control
-  retval = this->Ftdi::Context::set_flow_control(SIO_RTS_CTS_HS);
+  retval = ftdi_setflowctrl(this->ftdi, SIO_RTS_CTS_HS);
     CHECK_ERROR("Failed to set flow control");
-  Clear the buffers to flush things out
-  retval = this->Ftdi::Context::flush(Context::Input | Context::Output);
-    CHECK_ERROR("Failed to purge buffers");
   */
   retval = ftdi_set_bitmode(this->ftdi, 0x00, BITMODE_SYNCFF);
     CHECK_ERROR("Failed to reset bitmode");
@@ -328,7 +328,8 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
                               state->usb_dev,
                               state->out_ep,
                               transfer->buffer,
-                              BUFFER_SIZE + 2,
+                              //BUFFER_SIZE + 2,
+                              BUFFER_SIZE,
                               dionysus_readstream_cb,
                               state,
                               1000);
@@ -393,10 +394,13 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
 
   //Calculate our USB position
   state->usb_actual_pos += transfer->actual_length - 2;
-  if ((transfer->actual_length - 2) < state->usb_total_size){
+  printf ("Actual Position: (Dec) %d\n", state->usb_actual_pos);
+  printf ("Actual Position: (Hex) 0x%08X\n", state->usb_actual_pos);
+  if (state->usb_actual_pos < state->usb_total_size){
     //Because everything was sent in increments of chunksizes we need to see if the USB returned
     //something smaller, if so we might need to submit a new packet
-    state->usb_pos = state->usb_pos - (BUFFER_SIZE - (transfer->actual_length - 2));
+    state->usb_pos = state->usb_pos - ((transfer->length - 2) - (transfer->actual_length));
+    printf ("request pos: 0x%08X, actual: 0x%08X\n", state->usb_pos, state->usb_actual_pos);
     state->usb_size_left = state->usb_total_size - state->usb_pos;
     if (state->usb_size_left < 0){
       state->usb_size_left = 0;
@@ -404,6 +408,9 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
     if (state->debug){
       printf("%s(): Request %d more bytes from USB\n", __func__, state->usb_size_left);
     }
+  }
+  else {
+    state->usb_size_left = 0;
   }
 
   //Check if we need to request more data
@@ -413,7 +420,8 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
                               state->usb_dev,
                               state->out_ep,
                               transfer->buffer,
-                              BUFFER_SIZE + 2, //Add two for the modem status
+                              //BUFFER_SIZE + 2, //Add two for the modem status
+                              BUFFER_SIZE, //Add two for the modem status
                               dionysus_readstream_cb,
                               state,
                               1000);
@@ -442,6 +450,7 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
   }
 
   //Check to see if we are done
+  printf ("Number of transfers: %d, transfers available: %d\n", ((int)NUM_TRANSFERS), (int)state->transfer_queue->size());
   if (state->transfer_queue->size() == NUM_TRANSFERS){
     //All transfer queues are recovered!
     //We're done!
@@ -500,7 +509,8 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
                                 this->ftdi->usb_dev,
                                 this->ftdi->out_ep,
                                 buf,
-                                BUFFER_SIZE + 2,
+                                //BUFFER_SIZE + 2,
+                                BUFFER_SIZE,
                                 //max_packet_size + 2, //Add two for the modem status
 
                                 /*  Instead of only asking for the size we want we submit full packets
@@ -527,7 +537,7 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
         break;
       }
 
-      this->state->usb_pos += BUFFER_SIZE;
+      this->state->usb_pos += BUFFER_SIZE - 2;
       this->state->usb_size_left = this->state->usb_total_size - this->state->usb_pos;
       if (this->state->usb_size_left < 0){
         this->state->usb_size_left = 0;
@@ -540,7 +550,7 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
   }
   while (!this->state->finished){
     retval = libusb_handle_events_completed(this->ftdi->usb_ctx, NULL);
-    printf(".");
+    //printf(".");
   }
   return this->state->usb_total_size - this->state->usb_size_left;
 }

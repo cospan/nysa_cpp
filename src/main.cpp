@@ -108,7 +108,7 @@ int main(int argc, char **argv){
   args.vendor = DIONYSUS_VID;
   args.product = DIONYSUS_PID;
   args.debug = false;
-  uint8_t buffer[100];
+  uint8_t buffer[8192];
 
   uint32_t num_devices;
   uint32_t device_type = 0;
@@ -144,7 +144,8 @@ int main(int argc, char **argv){
     //  printf ("%02X ", buffer[i]);
     //}
     printf ("\n");
-
+    //dionysus.read_periph_data(0, 0, &buffer[0], 4096);
+    dionysus.read_periph_data(0, 0, &buffer[0], 8192);
     
     dionysus.close();
   }
