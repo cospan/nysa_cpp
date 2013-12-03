@@ -9,9 +9,11 @@
 
 static int check_response(state_t *state, response_header_t * response){
   int retval = 0;
-  printf ("Response\n");
-  printf ("\tID: %02X\n", response->id);
-  printf ("\tCommand Status: %02X\n", response->status);
+  if (state->debug){
+    printf ("Response\n");
+    printf ("\tID: %02X\n", response->id);
+    printf ("\tCommand Status: %02X\n", response->status);
+  }
   if (state->response_header.id != ID_RESPONSE){
     //Fail, ID does not match
     if (state->debug){
@@ -296,8 +298,10 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
 
   printds("Entered\n");
   buf_size = transfer->actual_length;
-  printf("Requested Length: %d\n", transfer->length);
-  printf("Actual length: %d\n", buf_size);
+  if (state->debug){
+    printf("Requested Length: %d\n", transfer->length);
+    printf("Actual length: %d\n", buf_size);
+  }
 
   if ((transfer->status != LIBUSB_TRANSFER_COMPLETED) || (state->error != 0)){
     if (state->debug){
@@ -395,14 +399,18 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
   }
 
   //Calculate our USB position
-  state->usb_actual_pos += transfer->actual_length - 2;
-  printf ("Actual Position: (Dec) %d\n", state->usb_actual_pos);
-  printf ("Actual Position: (Hex) 0x%08X\n", state->usb_actual_pos);
+  //state->usb_actual_pos += transfer->actual_length - 2; //Calculated above
+  if (state->debug){
+    printf ("Actual Position: (Dec) %d\n", state->usb_actual_pos);
+    printf ("Actual Position: (Hex) 0x%08X\n", state->usb_actual_pos);
+  }
   if (state->usb_actual_pos < state->usb_total_size){
     //Because everything was sent in increments of chunksizes we need to see if the USB returned
     //something smaller, if so we might need to submit a new packet
-    state->usb_pos = state->usb_pos - ((transfer->length - 2) - (transfer->actual_length));
-    printf ("request pos: 0x%08X, actual: 0x%08X\n", state->usb_pos, state->usb_actual_pos);
+    state->usb_pos = state->usb_pos - (transfer->length - transfer->actual_length);
+    if (state->debug){
+      printf ("request pos: 0x%08X, actual: 0x%08X\n", state->usb_pos, state->usb_actual_pos);
+    }
     state->usb_size_left = state->usb_total_size - state->usb_pos;
     if (state->usb_size_left < 0){
       state->usb_size_left = 0;
@@ -448,14 +456,18 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
   else {
     //No need to submit a new USB Transfer
     printds("no need to submit a new transfer\n");
-    print_transfer_status(transfer);
+    if (state->debug){
+      print_transfer_status(transfer);
+    }
     state->transfer_queue->push(transfer);
     state->buffer_queue->push(transfer->buffer);
     state->error = 0;
   }
 
   //Check to see if we are done
-  printf ("Number of transfers: %d, transfers available: %d\n", ((int)NUM_TRANSFERS), (int)state->transfer_queue->size());
+  if (state->debug){
+    printf ("Number of transfers: %d, transfers available: %d\n", ((int)NUM_TRANSFERS), (int)state->transfer_queue->size());
+  }
   if (state->transfer_queue->size() == NUM_TRANSFERS){
     //All transfer queues are recovered!
     //We're done!
@@ -507,7 +519,9 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
     while (!transfer_queue.empty()){
       transfer = this->transfer_queue.front();
       buf = this->buffer_queue.front();
-      printf ("Buffer: %p\n", buf);
+      if (this->debug){
+        printf ("Buffer: %p\n", buf);
+      }
       this->transfer_queue.pop();
       this->buffer_queue.pop();
       libusb_fill_bulk_transfer(transfer,

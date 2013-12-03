@@ -6,14 +6,14 @@
 static uint32_t populate_ping_command (command_header_t *ch){
   ch->id = ID;
   ch->command = PING;
-  ch->data_count[2] = 0x00;
-  ch->data_count[1] = 0x00;
   ch->data_count[0] = 0x00;
+  ch->data_count[1] = 0x00;
+  ch->data_count[2] = 0x00;
 
   ch->address.dev_addr = 0x00;
-  ch->address.reg_addr[2] = 0x00;
-  ch->address.reg_addr[1] = 0x00;
   ch->address.reg_addr[0] = 0x00;
+  ch->address.reg_addr[1] = 0x00;
+  ch->address.reg_addr[2] = 0x00;
 
   ch->data.data = 0x00;
   return COMMAND_HEADER_LEN;
@@ -23,7 +23,7 @@ static uint32_t populate_write_periph_command(command_header_t * ch, uint32_t dw
   ch->command = WRITE;
   ch->data_count[0] = (dword_len >> 16) & 0xFF;
   ch->data_count[1] = (dword_len >> 8 ) & 0xFF;
-  ch->data_count[1] = (dword_len      ) & 0xFF;
+  ch->data_count[2] = (dword_len      ) & 0xFF;
 
   ch->address.dev_addr = dev_addr;
   ch->address.reg_addr[0] = (reg_address >> 16) & 0xFF;
@@ -99,7 +99,7 @@ int Dionysus::write_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffe
   uint32_t header_len = populate_write_periph_command(&this->state->command_header, (size / 4), dev_addr, addr);
   retval = this->write(header_len, buffer, size);
     CHECK_ERROR("Failed to Write Data");
-  retval = this->read(RESPONSE_HEADER_LEN, buffer, size);
+  retval = this->read(header_len, NULL, 0);
     CHECK_ERROR("Failed to Read Data");
   return 0;
 }
@@ -108,7 +108,8 @@ int Dionysus::read_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer
   //Construct a packet header
   int retval = 0;
   uint32_t header_len = populate_read_periph_command(&this->state->command_header, (size / 4), dev_addr, addr);
-  retval = this->write_sync((uint8_t *) &this->state->command_header, header_len);
+  //retval = this->write_sync((uint8_t *) &this->state->command_header, header_len);
+  retval = this->write(header_len, NULL, 0);
   //retval = this->write(header_len, buffer, size);
     CHECK_ERROR("Failed to Write Data");
   retval = this->read(RESPONSE_HEADER_LEN, buffer, size);
