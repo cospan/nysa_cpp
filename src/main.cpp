@@ -21,6 +21,13 @@ struct arguments {
   bool debug;
 };
 
+static double TimevalDiff(const struct timeval *a, const struct timeval *b)
+{
+    return (a->tv_sec - b->tv_sec) + 1e-6 * (a->tv_usec - b->tv_usec);
+}
+
+
+
 static void usage (int exit_status){
   fprintf (exit_status == EXIT_SUCCESS ? stdout : stderr,
       "\n"
@@ -117,6 +124,12 @@ int main(int argc, char **argv){
   bool memory_device = false;
   bool fail = false;
   uint32_t fail_count = 0;
+  struct timeval start;
+  struct timeval end;
+  double interval = 1.0;
+  double mem_size;
+  double rate = 0;
+  uint32_t memory_device_index = 0;
 
   parse_args(&args, argc, argv);
 
@@ -128,7 +141,15 @@ int main(int argc, char **argv){
     dionysus.reset();
     //dionysus.program_fpga();
     //dionysus.soft_reset();
+    gettimeofday(&start, NULL);
     dionysus.ping();
+    gettimeofday(&end, NULL);
+    interval = TimevalDiff(&end, &start);
+    rate = 9 / interval;  //Megabytes/Sec
+    printf ("Time difference: %f\n", interval);
+    printf ("Ping Rate: %.2f Bytes/Sec\n", rate);
+
+
     printf ("Reading from the DRT\n");
     //dionysus.read_periph_data(0, 0, buffer, 32);
     dionysus.read_drt();
@@ -147,33 +168,73 @@ int main(int argc, char **argv){
     //}
     printf ("\n");
     //dionysus.read_periph_data(0, 0, buffer, 4096);
+    printf ("Peripheral Write Test. read a lot of data from the DRT\n");
+    printf ("\t(DRT will just ignore this data)\n");
+    dionysus.write_periph_data(0, 0, buffer, 8192);
+
+    printf ("Peripheral Read Test. Read a lot of data from the DRT\n");
+    printf ("\t(Data from the DRT will just loop)\n");
     dionysus.read_periph_data(0, 0, buffer, 8192);
     delete(buffer);
 
-    printf ("Memory Test! Read and write: 0x%08X Bytes\n", dionysus.get_drt_device_size(3));
-    buffer = new uint8_t[dionysus.get_drt_device_size(3)];
-    for (int i = 0; i < dionysus.get_drt_device_size(3); i++){
-      buffer[i] = i;
-    }
-    dionysus.write_memory(0x00000000, buffer, dionysus.get_drt_device_size(3));
-    for (int i = 0; i < dionysus.get_drt_device_size(3); i++){
-      buffer[i] = 0;
-    }
-    dionysus.read_memory(0x00000000, buffer, dionysus.get_drt_device_size(3));
-    for (int i = 0; i < dionysus.get_drt_device_size(3); i++){
-      if (buffer[i] != i % 256){
-        if (!fail){
-          if (fail_count > 16){
-            fail = true;
-          }
-          fail_count += 1;
-          printf ("Failed @ 0x%08X\n", i);
-          printf ("Value should be: 0x%08X but is: 0x%08X\n", i, buffer[i]);
-        }
+    printf ("Look for a memory device\n");
+
+    for (int i = 1; i < dionysus.get_drt_device_count() + 1; i++){
+      if (dionysus.get_drt_device_type(i) == 5){
+        memory_device_index = i;
       }
     }
+    if (memory_device_index > 0){
+      printf ("Found a memory device at position: %d\n", memory_device_index);
 
-    delete (buffer);
+      printf ("Memory Test! Read and write: 0x%08X Bytes\n", dionysus.get_drt_device_size(memory_device_index));
+
+      buffer = new uint8_t[dionysus.get_drt_device_size(memory_device_index)];
+      for (int i = 0; i < dionysus.get_drt_device_size(memory_device_index); i++){
+        buffer[i] = i;
+      }
+      printf ("Testing Full Memory Write Time...\n");
+      gettimeofday(&start, NULL);
+      dionysus.write_memory(0x00000000, buffer, dionysus.get_drt_device_size(memory_device_index));
+      gettimeofday(&end, NULL);
+      interval = TimevalDiff(&end, &start);
+      mem_size = dionysus.get_drt_device_size(memory_device_index);
+      rate = mem_size/ interval / 1e6;  //Megabytes/Sec
+      printf ("Time difference: %f\n", interval);
+      printf ("Write Rate: %.2f MB/Sec\n", rate);
+
+
+      for (int i = 0; i < dionysus.get_drt_device_size(memory_device_index); i++){
+        buffer[i] = 0;
+      }
+      gettimeofday(&start, NULL);
+      dionysus.read_memory(0x00000000, buffer, dionysus.get_drt_device_size(memory_device_index));
+      gettimeofday(&end, NULL);
+      interval = TimevalDiff(&end, &start);
+      mem_size = dionysus.get_drt_device_size(memory_device_index);
+      rate = mem_size/ interval / 1e6;  //Megabytes/Sec
+      printf ("Time difference: %f\n", interval);
+      printf ("Read Rate: %.2f MB/Sec\n", rate);
+
+
+      for (int i = 0; i < dionysus.get_drt_device_size(memory_device_index); i++){
+        if (buffer[i] != i % 256){
+          if (!fail){
+            if (fail_count > 16){
+              fail = true;
+            }
+            fail_count += 1;
+            printf ("Failed @ 0x%08X\n", i);
+            printf ("Value should be: 0x%08X but is: 0x%08X\n", i, buffer[i]);
+          }
+        }
+      }
+      if (!fail){
+        printf ("Memory Test Passed!\n");
+      }
+
+      delete (buffer);
+    }
 
     dionysus.close();
   }
