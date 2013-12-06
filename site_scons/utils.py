@@ -116,7 +116,7 @@ def get_source_list(base = "src", recursive = False):
 
     else:
         if recursive:
-            file_list = _get_sources(path)
+            file_list = list(set(_get_sources(path)))
         else:
             search_path = os.path.join(path, "*.c")
             p = glob.glob(search_path)
