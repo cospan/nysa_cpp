@@ -1,10 +1,18 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <string.h>
+#include <unistd.h>
 #include "ftdi.hpp"
 #include "dionysus.hpp"
+#include "gpio.hpp"
+#include "arduino.hpp"
 
 #define PROGRAM_NAME "dionysus-ftdi"
+
+
+#define MEMORY_TEST false
+//5 seconds
+#define GPIO_TEST_WAIT 10
 
 using namespace Ftdi;
 
@@ -25,8 +33,6 @@ static double TimevalDiff(const struct timeval *a, const struct timeval *b)
 {
     return (a->tv_sec - b->tv_sec) + 1e-6 * (a->tv_usec - b->tv_usec);
 }
-
-
 
 static void usage (int exit_status){
   fprintf (exit_status == EXIT_SUCCESS ? stdout : stderr,
@@ -110,6 +116,137 @@ static void parse_args(struct arguments* args, int argc, char *const argv[]){
   }
 }
 
+void breath(GPIO *g, uint32_t timeout){
+  struct timeval test_start;
+  struct timeval test_now;
+  double interval = 1.0;
+  gettimeofday(&test_start, NULL);
+  gettimeofday(&test_now, NULL);
+  uint32_t period;
+  uint32_t max_val = 10;
+  uint32_t current = 0;
+  uint32_t position = 0;
+  uint32_t delay_count = 0;
+  uint32_t delay = 0;
+  uint8_t direction = 1;
+  printf ("Breath\n");
+
+  printf ("Max value: %d\n", max_val);
+
+  while (interval < GPIO_TEST_WAIT){
+    if (direction){
+      if (current < max_val){
+        if (position < max_val) {
+          //printf ("pos++\n");
+          position++;
+        }
+        else {
+          //printf ("position = 0\n");
+          position = 0;
+          if (delay_count < delay){
+            delay_count++;
+          }
+          else {
+            //printf ("increment count\n");
+            delay_count = 0;
+            current++;
+          }
+        }
+      }
+      else {
+        //printf ("go down\n");
+        direction = 0;
+      }
+    }
+    else {
+      if (current > 0){
+        if (position < max_val){
+          position++;
+        }
+        else {
+          position = 0;
+          if (delay_count < delay){
+            delay_count++;
+          }
+          else {
+            delay_count = 0;
+            current--;
+          }
+        }
+      }
+      else {
+        //printf ("go up\n");
+        direction = 1;
+      }
+    }
+
+    if (position < current){
+      //printf ("HI\n");
+      //g->digitalWrite(0, LOW);
+      g->set_gpios(0x00000002);
+    }
+    else {
+      //printf ("LOW\n");
+      g->set_gpios(0x00000001);
+      //g->digitalWrite(0, HIGH);
+    }
+    gettimeofday(&test_now, NULL);
+    interval = TimevalDiff(&test_now, &test_start);
+  }
+};
+
+void test_gpios(Nysa *nysa, uint32_t dev_index, bool debug){
+  if (dev_index == 0){
+    printf ("Device index == 0!, this is the DRT!");
+  }
+  struct timeval test_start;
+  struct timeval test_now;
+  double interval = 1.0;
+
+  double led_interval = 1.0;
+  printf ("Setting up new gpio device\n");
+  //Setup GPIO
+  GPIO *gpio = new GPIO(nysa, dev_index, debug);
+  printf ("Got new GPIO Device\n");
+  try {
+    gpio->pinMode(0, OUTPUT); //LED 0
+    gpio->pinMode(1, OUTPUT); //LED 1
+
+    gpio->pinMode(2, INPUT); //Button 0
+    gpio->pinMode(3, INPUT); //Button 1
+  }
+  catch (int e) {
+    printf ("Error while setting pinMode: Error: %d\n", e);
+  }
+  printf ("set pin modes!\n");
+
+  //Length of GPIO tests
+  gettimeofday(&test_start, NULL);
+  gettimeofday(&test_now, NULL);
+
+  //Pulse width of the LED
+
+  interval = TimevalDiff(&test_now, &test_start);
+  printf ("Interval: %f\n", interval);
+  breath(gpio, GPIO_TEST_WAIT);
+
+  /*
+  while (interval < GPIO_TEST_WAIT){
+
+    gpio->toggle(0);
+    usleep(1000000);
+
+    gettimeofday(&test_now, NULL);
+    interval = TimevalDiff(&test_now, &test_start);
+  //printf ("Interval: %f\n", interval);
+  }
+  */
+  //Loop for about two seconds
+  printf ("Set 0 to high\n");
+  gpio->digitalWrite(0, LOW);
+  gpio->digitalWrite(1, LOW);
+}
+
 int main(int argc, char **argv){
   struct arguments args;
   args.vendor = DIONYSUS_VID;
@@ -179,11 +316,14 @@ int main(int argc, char **argv){
 
     printf ("Look for a memory device\n");
 
-    for (int i = 1; i < dionysus.get_drt_device_count() + 1; i++){
-      if (dionysus.get_drt_device_type(i) == 5){
-        memory_device_index = i;
+    if (MEMORY_TEST){
+      for (int i = 1; i < dionysus.get_drt_device_count() + 1; i++){
+        if (dionysus.get_drt_device_type(i) == 5){
+          memory_device_index = i;
+        }
       }
     }
+
     if (memory_device_index > 0){
       printf ("Found a memory device at position: %d\n", memory_device_index);
 
@@ -235,6 +375,16 @@ int main(int argc, char **argv){
 
       delete (buffer);
     }
+    uint32_t gpio_device = 0;
+    for (int i = 1; i < dionysus.get_drt_device_count() + 1; i++){
+      if (dionysus.get_drt_device_type(i) == get_gpio_device_type()){
+        gpio_device = i;
+      }
+    }
+    if (gpio_device > 0){
+      test_gpios(&dionysus, gpio_device, args.debug);
+    }
+
 
     dionysus.close();
   }
