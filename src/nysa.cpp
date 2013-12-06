@@ -67,27 +67,31 @@ int Nysa::crash_report(uint32_t *buffer){
 //Helper Functions
 int Nysa::write_register(uint32_t dev_addr, uint32_t reg_addr, uint32_t data){
   //write to only one address in the peripheral address space
+  printd("Entered\n");
   uint8_t d[4];
-  d[3] = ((data >> 24) & 0xFF);
-  d[2] = ((data >> 16) & 0xFF);
-  d[1] = ((data >> 8)  & 0xFF);
-  d[0] = ( data        & 0xFF);
+  d[0] = ((data >> 24) & 0xFF);
+  d[1] = ((data >> 16) & 0xFF);
+  d[2] = ((data >> 8)  & 0xFF);
+  d[3] = ( data        & 0xFF);
   return this->write_periph_data(dev_addr, reg_addr, &d[0], 4);
 }
 
 int Nysa::read_register(uint32_t dev_addr, uint32_t reg_addr, uint32_t *data){
   //read from only one address in the peripheral address space
+  printd("Entered\n");
   uint8_t d[4];
   uint32_t retval;
   retval = this->read_periph_data(dev_addr, reg_addr, &d[0], 4);
   CHECK_NYSA_ERROR("Error Reading Peripheral Data");
-  *data = (d[3] << 24 | d[2] << 16 | d[1] << 8 | d[0]);
+  //printf ("%02X %02X %02X %02X\n", d[0], d[1], d[2], d[3]);
+  *data = (d[0] << 24 | d[1] << 16 | d[2] << 8 | d[3]);
   return 0;
 }
 
 int Nysa::set_register_bit(uint32_t dev_addr, uint32_t reg_addr, uint8_t bit){
   uint32_t reg;
   int retval = 0;
+  printd("Entered\n");
 
   retval = this->read_register(dev_addr, reg_addr, &reg);
   CHECK_NYSA_ERROR("Error Reading Register");
@@ -101,12 +105,28 @@ int Nysa::set_register_bit(uint32_t dev_addr, uint32_t reg_addr, uint8_t bit){
 int Nysa::clear_register_bit(uint32_t dev_addr, uint32_t reg_addr, uint8_t bit){
   uint32_t reg;
   int retval = 0;
+  printd("Entered\n");
   retval = this->read_register(dev_addr, reg_addr, &reg);
   CHECK_NYSA_ERROR("Error Reading Register");
-
-  reg &= ~(1 << bit);
+  reg &= (~(1 << bit));
   retval = this->write_register(dev_addr, reg_addr, reg);
   CHECK_NYSA_ERROR("Error Writing Register");
+  return 0;
+}
+
+int Nysa::read_register_bit(uint32_t dev_addr, uint32_t reg_addr, uint8_t bit, bool * value){
+  uint32_t reg;
+  int retval = 0;
+  printd("Entered\n");
+  retval = this->read_register(dev_addr, reg_addr, &reg);
+  CHECK_NYSA_ERROR("Error Reading Register");
+  reg &= (1 << bit);
+  if (reg > 0){
+    *value = true;
+  }
+  else {
+    *value = false;
+  }
   return 0;
 }
 
@@ -173,7 +193,7 @@ uint32_t Nysa::get_drt_device_type(uint32_t index){
   //Start of the device in question
   pos = (index) * 32;
   //Go to the start of the type
-  type = this->drt[pos] << 24 | this->drt[pos + 1] << 16 | this->drt[pos + 2] | this->drt[pos + 3];
+  type = this->drt[pos] << 24 | this->drt[pos + 1] << 16 | this->drt[pos + 2] << 8| this->drt[pos + 3];
   return type;
 }
 uint32_t Nysa::get_drt_device_size(uint32_t index){

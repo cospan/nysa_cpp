@@ -4,6 +4,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#define printd(x)                                 \
+do{                                               \
+  if (this->debug) printf ("%s(): ", __func__);   \
+  if (this->debug) printf (x);                    \
+}while(0)
+
 #define CHECK_NYSA_ERROR(x)                       \
 do{                                               \
    if (retval < 0){                               \
@@ -46,10 +52,11 @@ class Nysa {
 
     //Helper Functions
     int write_register(uint32_t dev_addr, uint32_t reg_addr, uint32_t data);
-    int read_register(uint32_t dev_addr, uint32_t reg_addr, uint32_t *data);
-
     int set_register_bit(uint32_t dev_addr, uint32_t reg_addr, uint8_t bit);
     int clear_register_bit(uint32_t dev_addr, uint32_t reg_addr, uint8_t bit);
+
+    int read_register(uint32_t dev_addr, uint32_t reg_addr, uint32_t *data);
+    int read_register_bit(uint32_t dev_addr, uint32_t reg_addr, uint8_t bit, bool *value);
 
     //DRT
     int pretty_print_drt();
