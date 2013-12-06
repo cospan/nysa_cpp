@@ -49,7 +49,7 @@ class Dionysus : public Nysa {
     void usb_constructor();
     void usb_destructor();
     int usb_open(int vendor, int product);
-    
+
    public:
     //Constructor, Destructor
     Dionysus(bool debug = false);

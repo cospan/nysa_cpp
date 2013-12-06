@@ -57,10 +57,6 @@
                           }                                             \
                        }while(0)
 
-#define printd(x)     do{                                               \
-                        if (this->debug) printf ("%s(): ", __func__);   \
-                        if (this->debug) printf (x);                    \
-                      }while(0)
 
 #define printds(x)    do{                                               \
                         if (state->debug) printf ("%s(): ", __func__);  \
