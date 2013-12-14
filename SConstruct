@@ -1,7 +1,7 @@
 import utils
 
 utils.initialize_build()
-name = "dionysus"
+name = "dionysus-nysa-test"
 out_path = utils.create_bin_name(name)
 
 env = Environment(CPPPATH=[
