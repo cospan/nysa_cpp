@@ -147,7 +147,7 @@ int Dionysus::wait_for_interrupts(uint32_t timeout, uint32_t *interrupts){
   uint8_t buffer[RESPONSE_INT_HEADER_LEN];
   uint8_t local_interrupts[4];
   *interrupts = 0;
-  retval = this->read(RESPONSE_INT_HEADER_LEN, (uint8_t *) &local_interrupts, 4);
+  retval = this->read(RESPONSE_INT_HEADER_LEN, (uint8_t *) &local_interrupts, 4, timeout);
     CHECK_ERROR("Failed to Read Data");
 
   *interrupts = local_interrupts[0] << 24 | \

@@ -7,6 +7,10 @@
 #include <libusb.h>
 #include <malloc.h>
 
+static double TimevalDiff(const struct timeval *a, const struct timeval *b){
+    return (a->tv_sec - b->tv_sec) + 1e-6 * (a->tv_usec - b->tv_usec);
+}
+
 static int check_response(state_t *state, response_header_t * response){
   int retval = 0;
   if (state->debug){
@@ -118,6 +122,7 @@ void Dionysus::usb_constructor(){
   this->state->usb_size_left   = 0;
   this->state->usb_pos         = 0;
   this->state->usb_actual_pos  = 0;
+  this->state->timeout         = 1000;
 
   //Transfer and Buffer Queue
   this->state->transfer_queue  = &this->transfer_queue;
@@ -295,6 +300,7 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
   uint32_t cpy_size = 0;
   uint16_t status = 0;
   int retval = 0;
+  bool timeout;
 
   //printds("Entered\n");
   buf_size = transfer->actual_length;
@@ -304,9 +310,22 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
     printf("Actual length: %d\n", buf_size);
   }
   */
+  gettimeofday(&state->timeout_now, NULL);
+  //uint32_t timeout_val = (TimevalDiff(&state->timeout_now, &state->timeout_start) * 1000);
+  //printf ("Timeout value: %d\n", timeout_val);
+    
+  timeout = (TimevalDiff(&state->timeout_now, &state->timeout_start) * 1000) > state->timeout;
 
-  if ((transfer->status != LIBUSB_TRANSFER_COMPLETED) || (state->error != 0)){
+  if ( timeout || 
+      (transfer->status != LIBUSB_TRANSFER_COMPLETED) ||
+      (state->error != 0)){
+
+    if (timeout) {
+      state->error = -10;
+    }
+
     if (state->debug){
+
       //Error When reading from the transfer QUEUE
       //No more data to send, recover this transfer
       if (state->error == 0){
@@ -314,7 +333,7 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
         print_transfer_status(transfer);
       }
     }
-    state->buffer_queue->push(transfer->buffer);
+    state->transfer_queue->push(transfer);
     if (state->transfer_queue->size() == NUM_TRANSFERS){
       //We're done!
       state->finished = true;
@@ -478,7 +497,7 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
   }
 }
 
-int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
+int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size, uint32_t timeout){
 
   struct libusb_transfer * transfer;
   uint32_t buf_size = 0;
@@ -510,6 +529,7 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
   this->state->read_mem_addr    = 0;
   this->state->mem_response     = ((this->state->command_header.command & MEM_FLAG) > 0);
   this->state->finished         = false;
+  this->state->timeout          = timeout;
 
   if (transfer_queue.empty()){
     printf ("Transfer queue empty!\n");
@@ -574,16 +594,31 @@ int Dionysus::read(uint32_t header_len, uint8_t *buffer, uint32_t size){
     retval = libusb_handle_events_completed(this->ftdi->usb_ctx, NULL);
     //printf(".");
   }
-  return this->state->usb_total_size - this->state->usb_size_left;
+  if (this->state->error == 0) {
+    return this->state->usb_total_size - this->state->usb_size_left;
+  }
+  else {
+    return this->state->error;
+  }
 }
 
 static void dionysus_writestream_cb(struct libusb_transfer *transfer){
   state_t * state = (state_t *) transfer->user_data;
   uint32_t buf_size = 0;
   int retval = 0;
+  bool timeout;
   printds ("Entered\n");
-  if ((transfer->status != LIBUSB_TRANSFER_COMPLETED) || (state->error != 0)){
+  gettimeofday(&state->timeout_now, NULL);
+  timeout = (TimevalDiff(&state->timeout_now, &state->timeout_start) * 1000) > state->timeout;
+  if (timeout||
+      ((transfer->status != LIBUSB_TRANSFER_COMPLETED) ||
+      (state->error != 0))){
+
     if (state->error == 0){
+      if (timeout) {
+        state->error = -10;
+        printf ("Timeout while writing!\n");
+      }
       if (state->debug){
         print_transfer_status(transfer);
       }
@@ -601,7 +636,7 @@ static void dionysus_writestream_cb(struct libusb_transfer *transfer){
   }
 }
 
-int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
+int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size, uint32_t timeout){
   struct libusb_transfer * transfer;
   uint32_t buf_size = 0;
   uint8_t * buf = NULL;
@@ -630,6 +665,9 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
   this->state->error            = 0;
   this->state->header_found     = false; // this isn't needed for a write
   this->state->finished         = false;
+  this->state->timeout          = timeout;
+  gettimeofday(&this->state->timeout_start, NULL);
+
   //Setup a list of transfers
   if (transfer_queue.empty()){
     printf ("Transfer queue empty!\n");
@@ -655,7 +693,7 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
                             header_len,
                             dionysus_writestream_cb,
                             this->state,
-                            0);
+                            1000);
     transfer->flags = 0;
     transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
     retval = libusb_submit_transfer(transfer);
@@ -678,7 +716,7 @@ int Dionysus::write(uint32_t header_len, uint8_t *buffer, int size){
                               size,
                               dionysus_writestream_cb,
                               this->state,
-                              0);
+                              1000);
     transfer->flags = 0;
     transfer->type = LIBUSB_TRANSFER_TYPE_BULK;
     retval = libusb_submit_transfer(transfer);

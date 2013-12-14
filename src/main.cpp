@@ -250,7 +250,7 @@ void test_buttons(Nysa *nysa, uint32_t dev_index, bool debug){
   printf ("Interrupts: 0x%08X\n", gpio->get_interrupts());
   nysa->wait_for_interrupts(GPIO_TEST_WAIT * 1000, &interrupts);
   printf ("Interrupts: 0x%08X\n", interrupts);
-  if (gpio->is_interrupt_for_device(interrupts)){
+  if (gpio->is_interrupt_for_device(interrupts) > 0){
     printf ("GPIO interrupts: 0x%08X\n", gpio->get_interrupts());
     printf ("Found interrupts for GPIOs: 0x%08X\n", gpio->get_gpios());
   }

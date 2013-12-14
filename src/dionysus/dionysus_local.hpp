@@ -132,6 +132,10 @@ struct _state_t {
   uint32_t read_mem_addr;
   bool mem_response;
 
+  uint32_t timeout;
+  struct timeval timeout_start;
+  struct timeval timeout_now;
+
   //Reference to the class
   Dionysus *d;
   bool header_found;

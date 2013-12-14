@@ -1,14 +1,8 @@
-#include "dma.hpp"
+#include "driver.hpp"
 
 #define EMPTY_MASK (this->status_bit_empty[0] & this->status_bit_empty[1])
 #define READ_READY_MASK(x) (this->status_bit_empty[x] & this->status_bit_finished[x])
 
-enum _BLOCK_STATE{
-  UNKNOWN   = -1,
-  EMPTY     = 0,
-  BUSY      = 1,
-  FULL      = 2
-};
 
 DMA::DMA (Nysa *nysa, Driver *driver, uint32_t dev_addr, bool debug){
   this->nysa           = nysa;
@@ -28,6 +22,7 @@ DMA::DMA (Nysa *nysa, Driver *driver, uint32_t dev_addr, bool debug){
   this->timeout        = 1000;
   this->block_state[0] = UNKNOWN;
   this->block_state[1] = UNKNOWN;
+  this->read_state     = IDLE;
 }
 DMA::~DMA(){
 }
@@ -40,7 +35,7 @@ DMA::~DMA(){
  *  \param base1: Block 1 base address in memory, this is where the DMA
  *    controller will read/write the second block of data
  *  \param size: The size of the data to read/write in memory
- *  \param status_reg: address of the status register
+ *  \param REG_STATUS: address of the status register
  *  \param reg_base0: address of the block 0 base register
  *  \param reg_size0: address of the block 0 size register
  *  \param reg_base1: address of the block 1 base register
@@ -49,7 +44,7 @@ DMA::~DMA(){
  *    true: read/write will block until data is transfered
  *    false: read/write will return immediately if a transfer is finished or
  *      not
- *  \param strategy: enum rxtx_strategy
+ *  \param strategy: RXTX_STRATEGY
  *    IMMEDIATE: read/write data as fast as possible
  *    CADENCE: pace the transfer (as a read/write buffer is finished the next
  *      buffer transaction begins)
@@ -61,7 +56,7 @@ DMA::~DMA(){
  *  \remark This should be called before all functions
 */
 
-int DMA::setup( uint32_t status_reg,
+int DMA::setup( uint32_t REG_STATUS,
                 uint32_t base0,
                 uint32_t base1,
                 uint32_t size,
@@ -70,10 +65,10 @@ int DMA::setup( uint32_t status_reg,
                 uint32_t reg_base1,
                 uint32_t reg_size1,
                 bool     blocking,
-                enum rxtx_strategy strategy){
+                RXTX_STRATEGY strategy){
 
   uint32_t status       = 0;
-  this->REG_STATUS      = status_reg;
+  this->REG_STATUS      = REG_STATUS;
   this->SIZE            = size;
   this->BASE[0]         = base0;
   this->BASE[1]         = base1;
@@ -105,7 +100,7 @@ int DMA::setup( uint32_t status_reg,
  *        device that the device interface with has a relatively large amount
  *        of data that it outputs
  *
- *  \param strategy: enum rxtx_strategy
+ *  \param strategy: RXTX_STRATEGY
  *    IMMEDIATE: read/write data as fast as possible
  *    CADENCE: pace the transfer (as a read/write buffer is finished the next
  *      buffer transaction begins)
@@ -113,8 +108,8 @@ int DMA::setup( uint32_t status_reg,
  *      use a dual buffer
  *
 */
-void set_strategy(enum rxtx_strategy){
-  this->strategy = rxtx_strategy;
+void DMA::set_strategy (RXTX_STRATEGY strategy){
+  this->strategy = strategy;
 };
 
 /*
@@ -184,8 +179,8 @@ int DMA::write(uint8_t *buffer, uint32_t size){
       //wait for interrupts
       while (this->blocking){
         //If the user is okay with waiting just keep waiting for interrupts
-        interrupts = wait_for_interrupts(1000);
-        if (this->is_interrupt_for_device()) {
+        this->nysa->wait_for_interrupts(1000, &interrupts);
+        if (this->driver->is_interrupt_for_device(interrupts)) {
           break;
         }
       }
@@ -231,20 +226,20 @@ int DMA::read(uint8_t *buffer, uint32_t size){
 
   while (pos < size){
     //get the current status
-    status = this->driver->read_register(this->stats_reg);
+    status = this->driver->read_register(this->REG_STATUS);
     //Chck if anything is ready
-    if (status & (READ_READY_MASK[0] | READ_READY_MASK[1])){
+    if (status & (READ_READY_MASK(0) | READ_READY_MASK(1))){
       //thing are not ready
       //wait for interrupts
       while (this->blocking){
         //If the user is okay with waiting just keep waiting for interrupts
-        interrupts = wait_for_interrupts(1000);
-        if (this->is_interrupt_for_device()) {
+        this->nysa->wait_for_interrupts(1000, &interrupts);
+        if (this->driver->is_interrupt_for_device(interrupts)) {
           break;
         }
       }
       status = this->driver->read_register(this->REG_STATUS);
-      if (status & (READ_READY_MASK(0) | READ_READY_MASK[1])){
+      if (status & (READ_READY_MASK(0) | READ_READY_MASK(1))){
         return pos;
       }
     }

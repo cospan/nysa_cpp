@@ -33,8 +33,9 @@ DMA_DEMO_WRITER::DMA_DEMO_WRITER(Nysa *nysa, uint32_t dev_addr, bool debug) : Dr
   this->set_device_id(DMA_DEMO_WRITER_DEVICE_ID);
   this->set_device_sub_id(DMA_DEMO_WRITER_DEVICE_SUB_ID);
   this->find_device();
-  this->dma = new DMA(nysa, dev_addr, debug);
+  this->dma = new DMA(nysa, this, dev_addr, debug);
   this->dma->setup(
+            STATUS,
             DMA_BASE0,
             DMA_BASE1,
             DMA_SIZE,
@@ -42,15 +43,13 @@ DMA_DEMO_WRITER::DMA_DEMO_WRITER(Nysa *nysa, uint32_t dev_addr, bool debug) : Dr
             MEM_0_SIZE,
             MEM_1_BASE,
             MEM_1_SIZE,
-            CONTINUOUS_READ,
-            IMMEDIATE_READ,
-            BLOCKING);
+            BLOCKING,
+            CADENCE);
+
   this->dma->set_status_bits( STATUS_0_FINISHED,
                               STATUS_1_FINISHED,
                               STATUS_0_EMPTY,
-                              STATUS_1_EMPTY,
-                              0,
-                              0);
+                              STATUS_1_EMPTY);
 }
 DMA_DEMO_WRITER::~DMA_DEMO_WRITER(){
   delete(this->dma);
