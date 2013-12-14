@@ -63,7 +63,7 @@ class Dionysus : public Nysa {
     int write_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
     int read_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
 
-    int wait_for_interrupts(uint32_t timeout);
+    int wait_for_interrupts(uint32_t timeout, uint32_t *interrupts);
 
     int ping();
 

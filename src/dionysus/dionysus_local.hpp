@@ -30,7 +30,7 @@
 #define ID_RESPONSE 0xDC
 #define PING_RESPONSE_HEADER_LEN 5
 #define RESPONSE_HEADER_LEN 9
-#define RESPONSE_INT_HEADER_LEN 13
+#define RESPONSE_INT_HEADER_LEN 9
 
 
 #define  MODEM_CTS  (1 << 4)  /* Clear to send                */

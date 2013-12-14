@@ -296,12 +296,14 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
   uint16_t status = 0;
   int retval = 0;
 
-  printds("Entered\n");
+  //printds("Entered\n");
   buf_size = transfer->actual_length;
+  /*
   if (state->debug){
     printf("Requested Length: %d\n", transfer->length);
     printf("Actual length: %d\n", buf_size);
   }
+  */
 
   if ((transfer->status != LIBUSB_TRANSFER_COMPLETED) || (state->error != 0)){
     if (state->debug){
@@ -326,7 +328,7 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
 
   //Waiting for the header
   if (buf_size <= 2){
-    printds("Small packet ( <= 2 )\n");
+    //printds("Small packet ( <= 2 )\n");
     //we didn't get data back, we need to submit a new one
     libusb_fill_bulk_transfer(transfer,
                               state->usb_dev,
@@ -346,7 +348,6 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
   //Go to the buffer position after the modem status
   buffer = &buffer[2];
   buf_size -= 2;
-
 
   /*
   printf ("Incomming buffer\n");
@@ -400,10 +401,12 @@ static void dionysus_readstream_cb(struct libusb_transfer *transfer){
 
   //Calculate our USB position
   //state->usb_actual_pos += transfer->actual_length - 2; //Calculated above
+  /*
   if (state->debug){
     printf ("Actual Position: (Dec) %d\n", state->usb_actual_pos);
     printf ("Actual Position: (Hex) 0x%08X\n", state->usb_actual_pos);
   }
+  */
   if (state->usb_actual_pos < state->usb_total_size){
     //Because everything was sent in increments of chunksizes we need to see if the USB returned
     //something smaller, if so we might need to submit a new packet

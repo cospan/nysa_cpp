@@ -140,12 +140,20 @@ int Dionysus::read_memory(uint32_t address, uint8_t *buffer, uint32_t size){
   return 0;
 }
 
-int Dionysus::wait_for_interrupts(uint32_t timeout){
+int Dionysus::wait_for_interrupts(uint32_t timeout, uint32_t *interrupts){
   //Construct a packet header
   int retval = 0;
   uint32_t header_len = populate_interrupt_command(&this->state->command_header);
-  retval = this->read(RESPONSE_INT_HEADER_LEN, NULL, 0);
+  uint8_t buffer[RESPONSE_INT_HEADER_LEN];
+  uint8_t local_interrupts[4];
+  *interrupts = 0;
+  retval = this->read(RESPONSE_INT_HEADER_LEN, (uint8_t *) &local_interrupts, 4);
     CHECK_ERROR("Failed to Read Data");
+
+  *interrupts = local_interrupts[0] << 24 | \
+                local_interrupts[1] << 16 | \
+                local_interrupts[2] << 8  | \
+                local_interrupts[3];
   return 0;
 }
 
