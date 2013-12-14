@@ -62,10 +62,10 @@ class Driver {
 
     int find_device();          //Find the device set up in the constructor
     void set_unique_id(uint16_t id);
+    bool is_interrupt_for_device(uint32_t interrupts);
 
     virtual int open();         //Initialized a device that is found inside the DRT
     virtual int close();        //Clean up the device
-
 };
 
 

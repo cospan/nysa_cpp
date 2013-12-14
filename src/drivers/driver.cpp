@@ -70,6 +70,13 @@ static const char * driver_get_message(int retval){
 void Driver::set_unique_id(uint16_t id){
   this->unique_id = id;
 }
+bool Driver::is_interrupt_for_device(uint32_t interrupts){
+  if ((interrupts & (1 << dev_index)) > 0) {
+    printd("Interrupt for this device!\n");
+    return true;
+  }
+  return false;
+}
 
 //Find the device set up in the constructor
 int Driver::find_device(){
