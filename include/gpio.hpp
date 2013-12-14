@@ -9,7 +9,7 @@ static uint32_t get_gpio_device_type(){
   return (uint32_t) GPIO_DEVICE_ID;
 }
 
-class GPIO : protected Driver {
+class GPIO : public Driver {
 
   private:
     bool debug;
