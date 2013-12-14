@@ -7,7 +7,7 @@
 #include "gpio.hpp"
 #include "arduino.hpp"
 
-#define PROGRAM_NAME "dionysus-ftdi"
+#define PROGRAM_NAME "dionysus-nysa-test"
 
 
 #define MEMORY_TEST false
@@ -27,6 +27,9 @@ struct arguments {
   int vendor;
   int product;
   bool debug;
+  bool leds;
+  bool buttons;
+  bool memory;
 };
 
 static double TimevalDiff(const struct timeval *a, const struct timeval *b)
@@ -37,17 +40,23 @@ static double TimevalDiff(const struct timeval *a, const struct timeval *b)
 static void usage (int exit_status){
   fprintf (exit_status == EXIT_SUCCESS ? stdout : stderr,
       "\n"
-      "USAGE: %s [-v <vendor>] [-p <product>] [-d]\n"
+      "USAGE: %s [-v <vendor>] [-p <product>] [-d] [-12m]\n"
       "\n"
       "Options:\n"
-      " -h, --help\n"
+      "-h, --help\n"
       "\tPrints this helpful message\n"
-      " -d, --debug\n"
+      "-d, --debug\n"
       "\tEnable Debug output\n"
-      " -v, --vendor\n"
+      "-v, --vendor\n"
       "\tSpecify an alternate vendor ID (in hex) to use (Default: %04X)\n"
-      " -p, --product\n"
+      "-p, --product\n"
       "\tSpecify an alternate product ID (in hex) to use (Default: %04X)\n"
+      "-l, --leds\n"
+      "\tleds test (Breathing)\n"
+      "-b, --buttons\n"
+      "\tbuttons test (Button Interrupt)\n"
+      "-m, --memory\n"
+      "\tMemory Test\n"
       ,
       PROGRAM_NAME, DIONYSUS_VID, DIONYSUS_PID);
   exit(exit_status);
@@ -55,8 +64,8 @@ static void usage (int exit_status){
 
 static void parse_args(struct arguments* args, int argc, char *const argv[]){
   int print_usage = 0;
-  const char shortopts[] = "hdv:p:";
-  struct option longopts[5];
+  const char shortopts[] = "hdv:p:lbm";
+  struct option longopts[8];
   longopts[0].name = "help";
   longopts[0].has_arg = no_argument;
   longopts[0].flag = NULL;
@@ -77,10 +86,26 @@ static void parse_args(struct arguments* args, int argc, char *const argv[]){
   longopts[3].flag = NULL;
   longopts[3].val = 'p';
 
-  longopts[4].name = 0;
-  longopts[4].has_arg = 0;
-  longopts[4].flag = 0;
-  longopts[4].val = 0;
+  longopts[4].name = "leds";
+  longopts[4].has_arg = no_argument;
+  longopts[4].flag = NULL;
+  longopts[4].val = 'l';
+
+  longopts[5].name = "buttons";
+  longopts[5].has_arg = no_argument;
+  longopts[5].flag = NULL;
+  longopts[5].val = 'b';
+
+  longopts[6].name = "memory";
+  longopts[6].has_arg = no_argument;
+  longopts[6].flag = NULL;
+  longopts[6].val = '2';
+
+  longopts[7].name = 0;
+  longopts[7].has_arg = 0;
+  longopts[7].flag = 0;
+  longopts[7].val = 0;
+
   while (1) {
     int option_idx = 0;
     int c = getopt_long(argc, argv, shortopts, longopts, &option_idx);
@@ -107,6 +132,15 @@ static void parse_args(struct arguments* args, int argc, char *const argv[]){
       case 'p':
         args->product = strtol(optarg, (char**)0, 16);
         break;
+      case 'l':
+        args->leds = true;
+        break;
+      case 'b':
+        args->buttons = true;
+        break;
+      case 'm':
+        args->memory = true;
+        break;
       case '?': /* Fall through */
       default:
         printf ("Unknown Command\n");
@@ -123,11 +157,11 @@ void breath(GPIO *g, uint32_t timeout){
   gettimeofday(&test_start, NULL);
   gettimeofday(&test_now, NULL);
   uint32_t period;
-  uint32_t max_val = 10;
+  uint32_t max_val = 4;
   uint32_t current = 0;
   uint32_t position = 0;
   uint32_t delay_count = 0;
-  uint32_t delay = 0;
+  uint32_t delay = 4;
   uint8_t direction = 1;
   printf ("Breath\n");
 
@@ -137,24 +171,20 @@ void breath(GPIO *g, uint32_t timeout){
     if (direction){
       if (current < max_val){
         if (position < max_val) {
-          //printf ("pos++\n");
           position++;
         }
         else {
-          //printf ("position = 0\n");
           position = 0;
           if (delay_count < delay){
             delay_count++;
           }
           else {
-            //printf ("increment count\n");
             delay_count = 0;
             current++;
           }
         }
       }
       else {
-        //printf ("go down\n");
         direction = 0;
       }
     }
@@ -181,70 +211,54 @@ void breath(GPIO *g, uint32_t timeout){
     }
 
     if (position < current){
-      //printf ("HI\n");
-      //g->digitalWrite(0, LOW);
       g->set_gpios(0x00000002);
     }
     else {
-      //printf ("LOW\n");
       g->set_gpios(0x00000001);
-      //g->digitalWrite(0, HIGH);
     }
     gettimeofday(&test_now, NULL);
     interval = TimevalDiff(&test_now, &test_start);
   }
 };
 
-void test_gpios(Nysa *nysa, uint32_t dev_index, bool debug){
+void test_buttons(Nysa *nysa, uint32_t dev_index, bool debug){
+  uint32_t interrupts = 0;
   if (dev_index == 0){
     printf ("Device index == 0!, this is the DRT!");
   }
-  struct timeval test_start;
-  struct timeval test_now;
-  double interval = 1.0;
-
-  double led_interval = 1.0;
   printf ("Setting up new gpio device\n");
   //Setup GPIO
   GPIO *gpio = new GPIO(nysa, dev_index, debug);
   printf ("Got new GPIO Device\n");
-  try {
-    gpio->pinMode(0, OUTPUT); //LED 0
-    gpio->pinMode(1, OUTPUT); //LED 1
+  gpio->pinMode(0, OUTPUT); //LED 0
+  gpio->pinMode(1, OUTPUT); //LED 1
 
-    gpio->pinMode(2, INPUT); //Button 0
-    gpio->pinMode(3, INPUT); //Button 1
-  }
-  catch (int e) {
-    printf ("Error while setting pinMode: Error: %d\n", e);
-  }
+  gpio->pinMode(2, INPUT); //Button 0
+  gpio->pinMode(3, INPUT); //Button 1
+
+  gpio->set_interrupts_enable(0x0000000C);
+  gpio->set_interrupts_edge_mask(0x0000000C);
+  //gpio->set_interrupts_edge_mask(0x00000000);
   printf ("set pin modes!\n");
-
-  //Length of GPIO tests
-  gettimeofday(&test_start, NULL);
-  gettimeofday(&test_now, NULL);
 
   //Pulse width of the LED
 
-  interval = TimevalDiff(&test_now, &test_start);
-  printf ("Interval: %f\n", interval);
-  breath(gpio, GPIO_TEST_WAIT);
-
-  /*
-  while (interval < GPIO_TEST_WAIT){
-
-    gpio->toggle(0);
-    usleep(1000000);
-
-    gettimeofday(&test_now, NULL);
-    interval = TimevalDiff(&test_now, &test_start);
-  //printf ("Interval: %f\n", interval);
+  printf ("Waiting for button press...\n");
+  //wait 10 seconds
+  printf ("Buttons: 0x%08X\n", gpio->get_gpios());
+  gpio->get_interrupts();
+  printf ("Interrupts: 0x%08X\n", gpio->get_interrupts());
+  nysa->wait_for_interrupts(GPIO_TEST_WAIT * 1000, &interrupts);
+  printf ("Interrupts: 0x%08X\n", interrupts);
+  if (gpio->is_interrupt_for_device(interrupts)){
+    printf ("GPIO interrupts: 0x%08X\n", gpio->get_interrupts());
+    printf ("Found interrupts for GPIOs: 0x%08X\n", gpio->get_gpios());
   }
-  */
-  //Loop for about two seconds
+
   printf ("Set 0 to high\n");
   gpio->digitalWrite(0, LOW);
   gpio->digitalWrite(1, LOW);
+  delete(gpio);
 }
 
 int main(int argc, char **argv){
@@ -252,6 +266,9 @@ int main(int argc, char **argv){
   args.vendor = DIONYSUS_VID;
   args.product = DIONYSUS_PID;
   args.debug = false;
+  args.leds = false;
+  args.buttons = false;
+  args.memory = false;
   uint8_t* buffer = new uint8_t [8196];
 
   uint32_t num_devices;
@@ -316,7 +333,7 @@ int main(int argc, char **argv){
 
     printf ("Look for a memory device\n");
 
-    if (MEMORY_TEST){
+    if (args.memory){
       for (int i = 1; i < dionysus.get_drt_device_count() + 1; i++){
         if (dionysus.get_drt_device_type(i) == 5){
           memory_device_index = i;
@@ -382,7 +399,24 @@ int main(int argc, char **argv){
       }
     }
     if (gpio_device > 0){
-      test_gpios(&dionysus, gpio_device, args.debug);
+      if (args.buttons){
+        printf ("Testing buttons...\n");
+        test_buttons(&dionysus, gpio_device, args.debug);
+      }
+      if (args.leds){
+        GPIO *gpio = new GPIO(&dionysus, gpio_device, args.debug);
+        gpio->pinMode(0, OUTPUT); //LED 0
+        gpio->pinMode(1, OUTPUT); //LED 1
+
+        gpio->pinMode(2, INPUT); //Button 0
+        gpio->pinMode(3, INPUT); //Button 1
+
+        breath(gpio, GPIO_TEST_WAIT);
+        gpio->digitalWrite(0, LOW);
+        gpio->digitalWrite(1, LOW);
+
+        delete(gpio);
+      }
     }
 
 
