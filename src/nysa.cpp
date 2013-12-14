@@ -49,7 +49,7 @@ int Nysa::read_memory(uint32_t address, uint8_t *buffer, uint32_t size){
   return -1;
 }
 
-int Nysa::wait_for_interrupts(uint32_t timeout){
+int Nysa::wait_for_interrupts(uint32_t timeout, uint32_t *interrupts){
   printf ("Error: Calling function that should be subclassed!\n");
   return -1;
 }

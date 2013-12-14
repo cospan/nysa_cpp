@@ -44,7 +44,7 @@ class Nysa {
     virtual int write_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
     virtual int read_periph_data(uint32_t dev_addr, uint32_t addr, uint8_t *buffer, uint32_t size);
 
-    virtual int wait_for_interrupts(uint32_t timeout);
+    virtual int wait_for_interrupts(uint32_t timeout, uint32_t *interrupts);
 
     virtual int ping();
 
