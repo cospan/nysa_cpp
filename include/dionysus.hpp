@@ -78,8 +78,8 @@ class Dionysus : public Nysa {
     void cancel_all_transfers();
 
     /* I/O */
-    int read(uint32_t header_len, uint8_t *buffer, uint32_t size);
-    int write(uint32_t header_len, unsigned char *buf, int size);
+    int read(uint32_t header_len, uint8_t *buffer, uint32_t size, uint32_t timeout = 1000);
+    int write(uint32_t header_len, unsigned char *buf, int size, uint32_t timeout = 1000);
     int read_sync(uint8_t *buffer, uint16_t size);
     int write_sync(uint8_t *buffer, uint16_t size);
 

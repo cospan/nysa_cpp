@@ -14,7 +14,6 @@
 #define BLOCKING true
 
 #include "driver.hpp"
-#include "dma.hpp"
 
 static uint32_t get_dma_in_device_type(){
   return (uint32_t) DMA_DEMO_WRITER_DEVICE_ID;
