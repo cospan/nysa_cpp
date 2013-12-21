@@ -288,24 +288,24 @@ int DMA::write(uint8_t *buffer){
   uint32_t interrupts;
 
   while (!finished){
-    printf ("%s(): Main loop\n", __func__);
+//    printf ("%s(): Main loop\n", __func__);
     //Get the current status
     status = this->driver->read_register(this->REG_STATUS);
-    printf ("%s(): Status Register: 0x%08X\n", __func__, status);
+//    printf ("%s(): Status Register: 0x%08X\n", __func__, status);
     //Check if anything is ready
     if ((status & (this->status_bit_empty[0] | this->status_bit_empty[1])) == 0){ 
       //neither block is ready
       //wait for interrupts
       while (this->blocking){
-        //printf ("%s(): Blocking...\n", __func__);
+//        //printf ("%s(): Blocking...\n", __func__);
         //If the user is okay with waiting just keep waiting for interrupts
         this->nysa->wait_for_interrupts(1000, &interrupts);
         if (this->driver->is_interrupt_for_device(interrupts)) {
-          printf ("%s(): Found an interrupt\n", __func__);
+//          printf ("%s(): Found an interrupt\n", __func__);
           break;
         }
         else {
-          printf ("%s(): Didn't find interrupts\n", __func__);
+//          printf ("%s(): Didn't find interrupts\n", __func__);
           status = this->driver->read_register(this->REG_STATUS);
         }
       }
@@ -325,19 +325,19 @@ int DMA::write(uint8_t *buffer){
     switch (this->strategy){
       case (IMMEDIATE):
       case (CADENCE):
-        printf ("%s(): In Strategy Switch...\n", __func__);
-        printf ("%s(): block state [0]: 0x%08X\n", __func__, this->block_state[0]);
-        printf ("%s(): block state [1]: 0x%08X\n", __func__, this->block_state[1]);
+//        printf ("%s(): In Strategy Switch...\n", __func__);
+//        printf ("%s(): block state [0]: 0x%08X\n", __func__, this->block_state[0]);
+//        printf ("%s(): block state [1]: 0x%08X\n", __func__, this->block_state[1]);
         if ((this->block_state[0] == BLOCK_EMPTY) ||
             (this->block_state[1] == BLOCK_EMPTY)){
           //A FIFO is available, start sending data down NOW
           if (this->block_state[0] == BLOCK_EMPTY){
-            printf ("%s(): Writing to register 0\n", __func__);
+//            printf ("%s(): Writing to register 0\n", __func__);
             this->nysa->write_memory(this->BASE[0], &buffer[0], this->SIZE);
             this->driver->write_register(this->REG_SIZE[0], this->SIZE);
           }
           else {
-            printf ("%s(): Writing to register 1\n", __func__);
+//            printf ("%s(): Writing to register 1\n", __func__);
             this->nysa->write_memory(this->BASE[1], &buffer[1], this->SIZE);
             this->driver->write_register(this->REG_SIZE[1], this->SIZE);
           }
@@ -371,8 +371,8 @@ int DMA::write(uint8_t *buffer){
 
 void DMA::process_status(uint32_t status){
   if (this->writing){
-    //printf ("%s(): status_bit_empty[0] == 0x%08X\n", __func__, this->status_bit_empty[0]);
-    //printf ("%s(): status_bit_empty[1] == 0x%08X\n", __func__, this->status_bit_empty[1]);
+//    //printf ("%s(): status_bit_empty[0] == 0x%08X\n", __func__, this->status_bit_empty[0]);
+//    //printf ("%s(): status_bit_empty[1] == 0x%08X\n", __func__, this->status_bit_empty[1]);
     if (status & this->status_bit_empty[0]){
       this->block_state[0] = BLOCK_EMPTY;
     }
@@ -387,30 +387,30 @@ void DMA::process_status(uint32_t status){
     }
   }
   else { //reading
-    //printf ("%s(): Processing Read Status: 0x%08X\n", __func__, status);
+//    //printf ("%s(): Processing Read Status: 0x%08X\n", __func__, status);
     if (status & this->status_bit_finished[0]){
-      if (DEBUG_PROCESS) printf ("%s(): Block 0: Full\n", __func__);
+//      if (DEBUG_PROCESS) printf ("%s(): Block 0: Full\n", __func__);
       this->block_state[0] = BLOCK_FULL;
     }
     else if (status & this->status_bit_empty[0]){
-      if (DEBUG_PROCESS) printf ("%s(): Block 0: Empty\n", __func__);
+//      if (DEBUG_PROCESS) printf ("%s(): Block 0: Empty\n", __func__);
       this->block_state[0] = BLOCK_EMPTY;
     }
     else{
-      if (DEBUG_PROCESS) printf ("%s(): Block 0: Working\n", __func__);
+//      if (DEBUG_PROCESS) printf ("%s(): Block 0: Working\n", __func__);
       this->block_state[0] = BLOCK_BUSY;
     }
 
     if (status & this->status_bit_finished[1]){
-      if (DEBUG_PROCESS) printf ("%s(): Block 1: Full\n", __func__);
+//      if (DEBUG_PROCESS) printf ("%s(): Block 1: Full\n", __func__);
       this->block_state[1] = BLOCK_FULL;
     }
     else if (status & this->status_bit_empty[1]){
-      if (DEBUG_PROCESS) printf ("%s(): Block 1: Empty\n", __func__);
+//      if (DEBUG_PROCESS) printf ("%s(): Block 1: Empty\n", __func__);
       this->block_state[1] = BLOCK_EMPTY;
     }
     else{
-      if (DEBUG_PROCESS) printf ("%s(): Block 1: Working\n", __func__);
+//      if (DEBUG_PROCESS) printf ("%s(): Block 1: Working\n", __func__);
       this->block_state[1] = BLOCK_BUSY;
     }
   }
@@ -442,13 +442,13 @@ int DMA::read(uint8_t *buffer){
   uint32_t pos = 0;
   bool block = this->blocking;
   bool finished = false;
-  //printf ("%s(): Entered\n", __func__);
+//  //printf ("%s(): Entered\n", __func__);
 
   //get the current status
   while (!finished){
     switch (this->read_state){
       case(ST_IDLE):
-        printf ("%s(): IDLE State, requesting data\n", __func__);
+//        printf ("%s(): IDLE State, requesting data\n", __func__);
         //No transactions have started
         this->block_select = 0;
         this->driver->write_register(this->REG_SIZE[0], this->SIZE);
@@ -459,9 +459,9 @@ int DMA::read(uint8_t *buffer){
         break;
       case(ST_BUSY):
         //retval = this->nysa->wait_for_interrupts(2, &interrupts);
-        printf ("%s(): BUSY State\n", __func__);
+//        printf ("%s(): BUSY State\n", __func__);
         status = this->driver->read_register(this->REG_STATUS);
-        printf ("\tStatus Register: 0x%08X\n", status);
+//        printf ("\tStatus Register: 0x%08X\n", status);
         this->process_status(status);
         if ((this->block_state[0] == BLOCK_EMPTY) &&
             (this->block_state[1] == BLOCK_EMPTY)){
@@ -472,16 +472,16 @@ int DMA::read(uint8_t *buffer){
             (this->block_state[1] != BLOCK_FULL)){
           do {
             retval = this->nysa->wait_for_interrupts(1000, &interrupts);
-            printf ("\tInterrupt Return: %d\n", retval);
+//            printf ("\tInterrupt Return: %d\n", retval);
             if (retval == 0){
               if (this->driver->is_interrupt_for_device(interrupts)){
                   //we got some data
-                  printf ("\tInterrupt for us!\n");
+//                  printf ("\tInterrupt for us!\n");
                   //break;
               }
             }
             status = this->driver->read_register(this->REG_STATUS);
-            printf ("\tStatus Register: 0x%08X\n", status);
+//            printf ("\tStatus Register: 0x%08X\n", status);
             this->process_status(status);
             if ((this->block_state[0] == BLOCK_FULL) ||
                 (this->block_state[1] == BLOCK_FULL)){
@@ -489,19 +489,19 @@ int DMA::read(uint8_t *buffer){
             }
           } while (block);
         }
-        //printf ("\tBlock states: 0x%02X 0x%02X\n", this->block_state[0], this->block_state[1]);
+//        //printf ("\tBlock states: 0x%02X 0x%02X\n", this->block_state[0], this->block_state[1]);
         if ((this->block_state[0] == BLOCK_FULL) ||
             (this->block_state[1] == BLOCK_FULL) ){
           /*
           //there is some data to read
           if ((this->strategy == IMMEDIATE) || (this->strategy == CADENCE)){
             if (this->block_state[0] == BLOCK_EMPTY){
-              printf ("\tStart a read of block 0\n");
+//              printf ("\tStart a read of block 0\n");
               this->driver->write_register(this->REG_SIZE[0], this->SIZE);
               this->block_state[0] = BLOCK_BUSY;
             }
             if (this->block_state[1] == BLOCK_EMPTY){
-              printf ("\tStart a read of block 1\n");
+//              printf ("\tStart a read of block 1\n");
               this->driver->write_register(this->REG_SIZE[1], this->SIZE);
               this->block_state[1] = BLOCK_BUSY;
             }
@@ -516,10 +516,10 @@ int DMA::read(uint8_t *buffer){
       case(ST_FINISHED):
 
         //FPGA has some data to process
-        printf ("%s(): ST_FINISHED, Reading data\n", __func__);
+//        printf ("%s(): ST_FINISHED, Reading data\n", __func__);
         if ((this->block_state[0] != BLOCK_FULL) &&
             (this->block_state[1] != BLOCK_FULL) ){
-          printf ("\tBoth blocks are not full, get the state\n");
+//          printf ("\tBoth blocks are not full, get the state\n");
           this->read_state = ST_UNKNOWN;
           continue;
         }
@@ -528,13 +528,13 @@ int DMA::read(uint8_t *buffer){
         if ((this->block_state[0] == BLOCK_FULL) &&
             (this->block_state[1] == BLOCK_FULL)){
 
-          printf ("\tBOTH BLOCKS ARE FULL\n");
+//          printf ("\tBOTH BLOCKS ARE FULL\n");
           //both are finished, use the local variable as a tie breaker
           if (this->block_select == 0){
-            printf ("\t\t\t\t0\n");
+//            printf ("\t\t\t\t0\n");
             this->nysa->read_memory(this->BASE[0], buffer, this->SIZE);
             this->block_select = 1;
-            if (this->test_bit) printf ("\t\t\t\t\t\t\t\t\t\tFAIL!: Test bit should be 0\n");
+//            if (this->test_bit) printf ("\t\t\t\t\t\t\t\t\t\tFAIL!: Test bit should be 0\n");
             this->test_bit = 1;
             //status = this->driver->read_register(this->REG_STATUS);
             //if (this->strategy == IMMEDIATE) {
@@ -546,10 +546,10 @@ int DMA::read(uint8_t *buffer){
             //}
           }
           else {
-            printf ("\t\t\t\t1\n");
+//            printf ("\t\t\t\t1\n");
             this->nysa->read_memory(this->BASE[1], buffer, this->SIZE);
             this->block_select = 0;
-            if (!this->test_bit) printf ("\t\t\t\t\t\t\t\t\t\tFAIL!: Test bit should be 1\n");
+//            if (!this->test_bit) printf ("\t\t\t\t\t\t\t\t\t\tFAIL!: Test bit should be 1\n");
             this->test_bit = 0;
             //status = this->driver->read_register(this->REG_STATUS);
             //if (this->strategy == IMMEDIATE) {
@@ -565,17 +565,17 @@ int DMA::read(uint8_t *buffer){
 
         //SINGLE BLOCK READY
         else if (this->block_state[0] == BLOCK_FULL) {
-          printf ("\t\tBLOCK 0 IS FULL ONLY\n");
-          printf ("\t\t\t\t0\n");
+//          printf ("\t\tBLOCK 0 IS FULL ONLY\n");
+//          printf ("\t\t\t\t0\n");
           this->block_select = 1;
           this->nysa->read_memory(this->BASE[0], buffer, this->SIZE);
-          if (this->test_bit) printf ("\t\t\t\t\t\t\t\t\t\tFAIL!: Test bit should be 0\n");
+//          if (this->test_bit) printf ("\t\t\t\t\t\t\t\t\t\tFAIL!: Test bit should be 0\n");
           this->test_bit = 1;
           this->block_state[0] = BLOCK_EMPTY;
           //this->read_state = ST_IDLE;
           //if ((this->strategy == IMMEDIATE) || (this->strategy == CADENCE)){
             if (this->block_state[1] == BLOCK_EMPTY){
-              printf ("\t\t\tStart reading from block 1\n");
+//              printf ("\t\t\tStart reading from block 1\n");
               this->driver->write_register(this->REG_SIZE[1], this->SIZE);
               this->block_state[1] == BLOCK_BUSY;
             }
@@ -588,17 +588,17 @@ int DMA::read(uint8_t *buffer){
           this->read_state = ST_BUSY;
         }
         else if (this->block_state[1] == BLOCK_FULL) {
-          printf ("\t\tBLOCK 1 IS FULL ONLY\n");
-          printf ("\t\t\t\t1\n");
+//          printf ("\t\tBLOCK 1 IS FULL ONLY\n");
+//          printf ("\t\t\t\t1\n");
           this->block_select = 0;
           this->nysa->read_memory(this->BASE[1], buffer, this->SIZE);
-          if (!this->test_bit) printf ("\t\t\t\t\t\t\t\t\t\tFAIL!: Test bit should be 1\n");
+//          if (!this->test_bit) printf ("\t\t\t\t\t\t\t\t\t\tFAIL!: Test bit should be 1\n");
           this->test_bit = 0;
           this->block_state[1] = BLOCK_EMPTY;
           this->read_state = ST_IDLE;
           //if ((this->strategy == IMMEDIATE) || (this->strategy == CADENCE)){
             if (this->block_state[0] == BLOCK_EMPTY){
-              printf ("\t\t\tStart reading from block 0\n");
+//              printf ("\t\t\tStart reading from block 0\n");
               this->driver->write_register(this->REG_SIZE[0], this->SIZE);
               this->block_state[0] == BLOCK_BUSY;
             }
@@ -617,29 +617,29 @@ int DMA::read(uint8_t *buffer){
       case(ST_UNKNOWN):
       default:
         //We need to get the status
-        printf ("%s(): UNKNOWN Status\n", __func__);
+//        printf ("%s(): UNKNOWN Status\n", __func__);
         status = this->driver->read_register(this->REG_STATUS);
         this->process_status(status);
-        //printf ("\tBlock states: 0x%02X 0x%02X\n", this->block_state[0], this->block_state[1]);
+//        //printf ("\tBlock states: 0x%02X 0x%02X\n", this->block_state[0], this->block_state[1]);
         if ((this->block_state[0] == BLOCK_FULL) ||
             (this->block_state[1] == BLOCK_FULL) ){
           //there is some data to read
           this->read_state = ST_FINISHED;
-          //printf ("\tread state: 0x%02X\n", this->read_state);
+//          //printf ("\tread state: 0x%02X\n", this->read_state);
         }
         else if ((this->block_state[0] == BLOCK_BUSY) ||
                  (this->block_state[1] == BLOCK_BUSY)){
           //The FPGA is busy working on something
           this->read_state = ST_BUSY;
-          //printf ("\tread state: 0x%02X\n", this->read_state);
+//          //printf ("\tread state: 0x%02X\n", this->read_state);
         }
 
         else if ((this->block_state[0] == BLOCK_EMPTY) ||
                  (this->block_state[1] == BLOCK_EMPTY)){
           //The FPGA is not doing anything right now
-          printf ("\tThere is an empty block, go to IDLE!\n");
+//          printf ("\tThere is an empty block, go to IDLE!\n");
           this->read_state = ST_IDLE;
-          //printf ("\tread state: 0x%02X\n", this->read_state);
+//          //printf ("\tread state: 0x%02X\n", this->read_state);
         }
         break;
     }//switch (read_state)
