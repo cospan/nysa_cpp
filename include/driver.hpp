@@ -86,20 +86,7 @@ enum _RXTX_STRATEGY {
   CADENCE       = 1,
   SINGLE_BUFFER = 2
 };
-enum _DMA_STATE {
-  IDLE      = 0,
-  BUSY      = 1,
-  FINISHED  = 2,
-};
-enum _BLOCK_STATE{
-  UNKNOWN   = -1,
-  EMPTY     = 0,
-  WORKING   = 1,
-  FULL      = 2
-};
 
-typedef enum _BLOCK_STATE BLOCK_STATE;
-typedef enum _DMA_STATE DMA_STATE;
 typedef enum _RXTX_STRATEGY RXTX_STRATEGY;
 
 class DMA {
@@ -108,6 +95,7 @@ class DMA {
     Nysa                *nysa;
     Driver              *driver;
     bool                debug;
+    bool                writing;
     uint32_t            dev_addr;
     uint32_t            SIZE;
     uint32_t            REG_STATUS;
@@ -116,32 +104,60 @@ class DMA {
     uint32_t            REG_SIZE[2];
     bool                blocking;
     uint32_t            timeout;
-                        
-    uint8_t             status_bit_finished[2];
-    uint8_t             status_bit_empty[2];
+
+    uint32_t            status_bit_finished[2];
+    uint32_t            status_bit_empty[2];
 
     RXTX_STRATEGY       strategy;
     bool                block_select;
-    BLOCK_STATE         block_state[2];
-    DMA_STATE           read_state;
+    uint32_t            block_state[2];
+    uint32_t            read_state;
+    bool                test_bit;
 
-    void                update_block_state(uint32_t interrupts);
 
-  public:
-  DMA (Nysa *nysa, Driver *driver, uint32_t dev_addr, bool debug = false);
-  ~DMA();
-
-  //DMA Setup
-  int setup(uint32_t reg_status,
-            uint32_t base0,
-            uint32_t base1,
+    void update_block_state(uint32_t interrupts);
+    void process_status(uint32_t status);
+    int  setup(
+            uint32_t mem_base0,
+            uint32_t mem_base1,
             uint32_t size,
+            uint32_t reg_status,
             uint32_t reg_base0,
             uint32_t reg_size0,
             uint32_t reg_base1,
             uint32_t reg_size1,
             bool     blocking = true,
-            RXTX_STRATEGY = CADENCE);
+            RXTX_STRATEGY strategy = CADENCE);
+  public:
+  DMA (Nysa *nysa, Driver *driver, uint32_t dev_addr, bool debug = false);
+  ~DMA();
+
+  //DMA Setup
+  int setup_write(
+            uint32_t mem_base0,
+            uint32_t mem_base1,
+            uint32_t size,
+            uint32_t reg_status,
+            uint32_t reg_base0,
+            uint32_t reg_size0,
+            uint32_t reg_base1,
+            uint32_t reg_size1,
+            bool     blocking = true,
+            RXTX_STRATEGY strategy = CADENCE);
+
+  int setup_read(
+            uint32_t mem_base0,
+            uint32_t mem_base1,
+            uint32_t size,
+            uint32_t reg_status,
+            uint32_t reg_base0,
+            uint32_t reg_size0,
+            uint32_t reg_base1,
+            uint32_t reg_size1,
+            bool     blocking = true,
+            RXTX_STRATEGY strategy = CADENCE);
+
+
 
   void set_status_bits( uint8_t finished0,
                         uint8_t finished1,
@@ -152,9 +168,9 @@ class DMA {
   void set_strategy(RXTX_STRATEGY = CADENCE);
 
   //Write
-  int write(uint8_t *buffer, uint32_t size);
+  int write(uint8_t *buffer);
   //Read
-  int read(uint8_t *buffer, uint32_t size);
+  int read(uint8_t *buffer);
 };
 
 
