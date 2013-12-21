@@ -8,6 +8,7 @@
 #include "arduino.hpp"
 #include "dma_demo_reader.hpp"
 #include "dma_demo_writer.hpp"
+#include "print_colors.hpp"
 
 #define PROGRAM_NAME "dionysus-nysa-test"
 
@@ -44,17 +45,23 @@ static double TimevalDiff(const struct timeval *a, const struct timeval *b)
 static void usage (int exit_status){
   fprintf (exit_status == EXIT_SUCCESS ? stdout : stderr,
       "\n"
+      P_GRAY
       "USAGE: %s [-v <vendor>] [-p <product>] [-d] [-12m]\n"
+      P_NORMAL
       "\n"
       "Options:\n"
+      P_CYAN
       "-h, --help\n"
       "\tPrints this helpful message\n"
+      P_GREEN
       "-d, --debug\n"
       "\tEnable Debug output\n"
+      P_NORMAL
       "-v, --vendor\n"
       "\tSpecify an alternate vendor ID (in hex) to use (Default: %04X)\n"
       "-p, --product\n"
       "\tSpecify an alternate product ID (in hex) to use (Default: %04X)\n"
+      P_BLUE
       "-l, --leds\n"
       "\tleds test (Breathing)\n"
       "-b, --buttons\n"
@@ -65,6 +72,7 @@ static void usage (int exit_status){
       "\tDMA Read Demo\n"
       "-w, --dma_write\n"
       "\tDMA Write Demo\n"
+      P_NORMAL
       ,
       PROGRAM_NAME, DIONYSUS_VID, DIONYSUS_PID);
   exit(exit_status);
