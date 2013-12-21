@@ -4,12 +4,12 @@
 #include "dma_demo_writer.hpp"
 
 enum DMA_DEMO_WRITER_REGISTERS{
-  CONTROL             = 0,
-  STATUS              = 1,
-  MEM_0_BASE          = 2,
-  MEM_0_SIZE          = 3,
-  MEM_1_BASE          = 4,
-  MEM_1_SIZE          = 5
+  REG_CONTROL             = 0,
+  REG_STATUS              = 1,
+  REG_MEM_0_BASE          = 2,
+  REG_MEM_0_SIZE          = 3,
+  REG_MEM_1_BASE          = 4,
+  REG_MEM_1_SIZE          = 5
 };
 
 enum CONTROL_REG {
@@ -20,13 +20,11 @@ enum CONTROL_REG {
 };
 
 enum STATUS_REG {
-  STATUS_0_FINISHED   = 0,
-  STATUS_1_FINISHED   = 1,
-  STATUS_0_EMPTY      = 2,
-  STATUS_1_EMPTY      = 3
+  STATUS_0_EMPTY      = 0,
+  STATUS_1_EMPTY      = 1,
+  STATUS_0_FINISHED   = 2,
+  STATUS_1_FINISHED   = 3
 };
-
-
 
 DMA_DEMO_WRITER::DMA_DEMO_WRITER(Nysa *nysa, uint32_t dev_addr, bool debug) : Driver(nysa, debug){
   this->debug = debug;
@@ -34,17 +32,16 @@ DMA_DEMO_WRITER::DMA_DEMO_WRITER(Nysa *nysa, uint32_t dev_addr, bool debug) : Dr
   this->set_device_sub_id(DMA_DEMO_WRITER_DEVICE_SUB_ID);
   this->find_device();
   this->dma = new DMA(nysa, this, dev_addr, debug);
-  this->dma->setup(
-            STATUS,
-            DMA_BASE0,
-            DMA_BASE1,
-            DMA_SIZE,
-            MEM_0_BASE,
-            MEM_0_SIZE,
-            MEM_1_BASE,
-            MEM_1_SIZE,
-            BLOCKING,
-            CADENCE);
+  this->dma->setup_write( DMA_BASE0,
+                          DMA_BASE1,
+                          DMA_SIZE,
+                          REG_STATUS,
+                          REG_MEM_0_BASE,
+                          REG_MEM_0_SIZE,
+                          REG_MEM_1_BASE,
+                          REG_MEM_1_SIZE,
+                          BLOCKING,
+                          CADENCE);
 
   this->dma->set_status_bits( STATUS_0_FINISHED,
                               STATUS_1_FINISHED,
@@ -55,24 +52,27 @@ DMA_DEMO_WRITER::~DMA_DEMO_WRITER(){
   delete(this->dma);
 }
 //Control
-void DMA_DEMO_WRITER::enable_dma_in(bool enable){
+void DMA_DEMO_WRITER::enable_dma_writer(bool enable){
   if (enable) {
-    this->set_register_bit(CONTROL, ENABLE);
-    this->set_register_bit(CONTROL, ENABLE_INTERRUPTS);
+    this->set_register_bit(REG_CONTROL, ENABLE);
+    this->set_register_bit(REG_CONTROL, ENABLE_INTERRUPTS);
   }
   else {
-    this->clear_register_bit(CONTROL, ENABLE);
-    this->clear_register_bit(CONTROL, ENABLE_INTERRUPTS);
+    this->clear_register_bit(REG_CONTROL, ENABLE);
+    this->clear_register_bit(REG_CONTROL, ENABLE_INTERRUPTS);
   }
+  printf ("%s(): Control Register: 0x%08X\n", __func__, this->read_register(REG_CONTROL));
 }
-void DMA_DEMO_WRITER::reset_dma_in(){
-  this->set_register_bit(CONTROL, RESET);
-  usleep(300000);
-  this->clear_register_bit(CONTROL, RESET);
+void DMA_DEMO_WRITER::reset_dma_writer(){
+  //printf ("%s(): Reset...\n", __func__);
+  this->set_register_bit(REG_CONTROL, RESET);
+  usleep(30000);
+  //printf ("%s(): Reset finished...\n", __func__);
+  this->clear_register_bit(REG_CONTROL, RESET);
 }
 bool DMA_DEMO_WRITER::finished(){
   uint32_t status;
-  status = this->read_register(STATUS);
+  status = this->read_register(REG_STATUS);
   if (status &  ((1 << STATUS_0_FINISHED) | (1 << STATUS_1_FINISHED))) {
     return true;
   }
@@ -80,19 +80,19 @@ bool DMA_DEMO_WRITER::finished(){
 }
 bool DMA_DEMO_WRITER::empty(){
   uint32_t status;
-  status = this->read_register(STATUS);
+  status = this->read_register(REG_STATUS);
   if (status &  ((1 << STATUS_0_EMPTY) | (1 << STATUS_1_EMPTY))) {
     return true;
   }
   return false;
 }
-//Data transfer
-void DMA_DEMO_WRITER::dma_write(uint8_t *buffer, uint32_t size){
-  this->dma->write(buffer, size);
+uint32_t DMA_DEMO_WRITER::get_buffer_size(){
+  return DMA_SIZE;
 }
-uint8_t * DMA_DEMO_WRITER::dma_read(uint32_t size){
-  uint8_t * buffer;
-  this->dma->read(buffer, size);
-  return buffer;
+//Data transfer
+void DMA_DEMO_WRITER::dma_write(uint8_t *buffer){
+  printf ("%s(): Writing...\n", __func__);
+  this->dma->write(buffer);
+  printf ("%s(): Finished Writing\n", __func__);
 }
 

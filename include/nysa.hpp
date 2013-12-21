@@ -18,8 +18,6 @@ do{                                               \
    }                                              \
 }while(0)
 
-
-
 class Nysa {
   private:
     uint8_t * drt;
@@ -72,7 +70,8 @@ class Nysa {
     int get_drt_device_flags(uint32_t index, uint16_t *nysa_flags, uint16_t *dev_flags);
     uint32_t get_drt_device_addr(uint32_t index);
 
-
     int pretty_print_crash_report();
+
+    uint32_t find_device(uint32_t device_type, uint32_t subtype = 0, uint32_t id = 0);
 };
 #endif //__NYSA_H__
