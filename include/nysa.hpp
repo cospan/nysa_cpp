@@ -3,11 +3,14 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include "print_colors.hpp"
 
 #define printd(x)                                 \
 do{                                               \
+  if (this->debug) printf (P_GREEN);              \
   if (this->debug) printf ("%s(): ", __func__);   \
   if (this->debug) printf (x);                    \
+  if (this->debug) printf (P_NORMAL);             \
 }while(0)
 
 #define CHECK_NYSA_ERROR(x)                       \
