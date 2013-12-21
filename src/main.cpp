@@ -6,6 +6,8 @@
 #include "dionysus.hpp"
 #include "gpio.hpp"
 #include "arduino.hpp"
+#include "dma_demo_reader.hpp"
+#include "dma_demo_writer.hpp"
 
 #define PROGRAM_NAME "dionysus-nysa-test"
 
@@ -30,6 +32,8 @@ struct arguments {
   bool leds;
   bool buttons;
   bool memory;
+  bool dma_read;
+  bool dma_write;
 };
 
 static double TimevalDiff(const struct timeval *a, const struct timeval *b)
@@ -57,6 +61,10 @@ static void usage (int exit_status){
       "\tbuttons test (Button Interrupt)\n"
       "-m, --memory\n"
       "\tMemory Test\n"
+      "-r, --dma_read\n"
+      "\tDMA Read Demo\n"
+      "-w, --dma_write\n"
+      "\tDMA Write Demo\n"
       ,
       PROGRAM_NAME, DIONYSUS_VID, DIONYSUS_PID);
   exit(exit_status);
@@ -64,8 +72,8 @@ static void usage (int exit_status){
 
 static void parse_args(struct arguments* args, int argc, char *const argv[]){
   int print_usage = 0;
-  const char shortopts[] = "hdv:p:lbm";
-  struct option longopts[8];
+  const char shortopts[] = "hdv:p:lbmrw";
+  struct option longopts[10];
   longopts[0].name = "help";
   longopts[0].has_arg = no_argument;
   longopts[0].flag = NULL;
@@ -99,12 +107,22 @@ static void parse_args(struct arguments* args, int argc, char *const argv[]){
   longopts[6].name = "memory";
   longopts[6].has_arg = no_argument;
   longopts[6].flag = NULL;
-  longopts[6].val = '2';
+  longopts[6].val = 'm';
 
-  longopts[7].name = 0;
-  longopts[7].has_arg = 0;
-  longopts[7].flag = 0;
-  longopts[7].val = 0;
+  longopts[7].name = "dma_read";
+  longopts[7].has_arg = no_argument;
+  longopts[7].flag = NULL;
+  longopts[7].val = 'r';
+
+  longopts[8].name = "dma_write";
+  longopts[8].has_arg = no_argument;
+  longopts[8].flag = NULL;
+  longopts[8].val = 'w';
+
+  longopts[9].name = 0;
+  longopts[9].has_arg = 0;
+  longopts[9].flag = 0;
+  longopts[9].val = 0;
 
   while (1) {
     int option_idx = 0;
@@ -141,6 +159,12 @@ static void parse_args(struct arguments* args, int argc, char *const argv[]){
       case 'm':
         args->memory = true;
         break;
+      case 'r':
+        args->dma_read = true;
+        break;
+      case 'w':
+        args->dma_write = true;
+        break;
       case '?': /* Fall through */
       default:
         printf ("Unknown Command\n");
@@ -148,6 +172,54 @@ static void parse_args(struct arguments* args, int argc, char *const argv[]){
         break;
     }
   }
+}
+
+void test_dma_reader(DMA_DEMO_READER * r){
+  struct timeval start;
+  struct timeval end;
+  double interval = 1.0;
+  double rate = 0;
+  uint32_t count = 500;
+  uint8_t * buffer = new uint8_t [r->get_buffer_size()];
+  r->reset_dma_reader();
+  r->enable_dma_reader(true);
+  gettimeofday(&start, NULL);
+  for (int i = 0; i < count; i++){
+    r->dma_read(buffer);
+    /*
+    printf ("Buffer:\n");
+    for (int i = 0; i < 16; i++){
+      printf ("0x%02X ", buffer[i]);
+    }
+    printf ("\n");
+    */
+
+  }
+  gettimeofday(&end, NULL);
+  interval = TimevalDiff(&end, &start);
+  printf ("Time difference: %f\n", interval);
+  rate = (count * r->get_buffer_size()) / interval / 1e6;  //bytes/Sec
+  printf ("Read Rate: %.2f MB/Sec\n", rate);
+
+  r->enable_dma_reader(false);
+  //for (int i = 0; i < r->get_buffer_size(); i++){
+  delete(buffer);
+
+}
+void test_dma_writer(DMA_DEMO_WRITER * w){
+  uint32_t count = 60;
+  uint8_t * buffer = new uint8_t [w->get_buffer_size()];
+  printf ("Testing DMA Writer\n");
+  for (int i = 0; i < w->get_buffer_size(); i++){
+    buffer[i] = (uint8_t) i;
+  }
+  w->reset_dma_writer();
+  w->enable_dma_writer(true);
+  for (int i = 0; i < count; i++){
+    w->dma_write(buffer);
+  }
+  w->enable_dma_writer(false);
+  delete(buffer);
 }
 
 void breath(GPIO *g, uint32_t timeout){
@@ -392,12 +464,16 @@ int main(int argc, char **argv){
 
       delete (buffer);
     }
+
     uint32_t gpio_device = 0;
+    gpio_device = dionysus.find_device(get_gpio_device_type());
+    /*
     for (int i = 1; i < dionysus.get_drt_device_count() + 1; i++){
       if (dionysus.get_drt_device_type(i) == get_gpio_device_type()){
         gpio_device = i;
       }
     }
+    */
     if (gpio_device > 0){
       if (args.buttons){
         printf ("Testing buttons...\n");
@@ -419,7 +495,18 @@ int main(int argc, char **argv){
       }
     }
 
-
+    uint32_t device = 0;
+    device = dionysus.find_device(get_dma_reader_device_type());
+    if (args.dma_read && (device > 0)){
+      DMA_DEMO_READER dma_reader = DMA_DEMO_READER(&dionysus, device, args.debug);
+      test_dma_reader(&dma_reader);
+    }
+    device = dionysus.find_device(get_dma_writer_device_type());
+    printf ("Device: 0x%02X\n", device);
+    if (args.dma_write && (device > 0)){
+      DMA_DEMO_WRITER dma_writer = DMA_DEMO_WRITER(&dionysus, device, args.debug);
+      test_dma_writer(&dma_writer);
+    }
     dionysus.close();
   }
   return 0;
