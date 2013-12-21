@@ -283,3 +283,20 @@ int Nysa::pretty_print_crash_report(){
   return -1;
 }
 
+
+uint32_t Nysa::find_device(uint32_t device_type, uint32_t subtype, uint32_t id){
+  for (int i = 1; i  < this->get_drt_device_count() + 1; i ++){
+    if (this->get_drt_device_type(i) == device_type){
+      if (subtype > 0){
+        //User has specified a subtype ID
+        //XXX: Not implemented yet
+      }
+      if (id > 0){
+        //User has specified an implimentation specific identification
+        //XXX: Not implemented yet
+      }
+      return i;
+    }
+  }
+  return 0;
+}
