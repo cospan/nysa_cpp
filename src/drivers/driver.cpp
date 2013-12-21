@@ -82,7 +82,6 @@ bool Driver::is_interrupt_for_device(uint32_t interrupts){
 int Driver::find_device(){
 
   if (n == NULL){
-
     return NYSA_NOT_FOUND;
   }
   if (this->n->get_drt_device_count() == 0){
