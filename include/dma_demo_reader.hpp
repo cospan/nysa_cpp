@@ -4,11 +4,6 @@
 #define DMA_DEMO_READER_DEVICE_ID 100
 #define DMA_DEMO_READER_DEVICE_SUB_ID 0
 
-#define DMA_BASE0 0x00000000
-#define DMA_BASE1 0x00010000
-
-#define DMA_SIZE  0x00010000
-
 #define BLOCKING true
 
 #include "driver.hpp"
@@ -20,6 +15,12 @@ static uint32_t get_dma_reader_device_type(){
 
 class DMA_DEMO_READER : public Driver {
   private:
+    const static uint32_t DMA_BASE0                   = 0x00000000;
+    const static uint32_t DMA_BASE1                   = 0x00010000;
+
+    const static uint32_t DMA_SIZE                    = 0x00010000;
+
+
     bool debug;
     DMA *dma;
   public:
