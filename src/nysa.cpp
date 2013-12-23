@@ -326,6 +326,38 @@ int Nysa::pretty_print_crash_report(){
   return -1;
 }
 
+uint32_t Nysa::get_board_id(){
+  uint32_t board_id = 0;
+  uint32_t pos = 0;
+  if (this->drt == NULL){
+    return -1;
+  }
+  //Start of the device in question
+  pos = 12;
+  //Go to the start of the type
+  board_id = (this->drt[pos    ] << 24) |
+             (this->drt[pos + 1] << 16) |
+             (this->drt[pos + 2] << 8)  |
+             (this->drt[pos + 3]          );
+  return board_id;
+}
+
+
+uint32_t Nysa::get_image_id(){
+  uint32_t image_id = 0;
+  uint32_t pos = 0;
+  if (this->drt == NULL){
+    return -1;
+  }
+  //Start of the device in question
+  pos = 16;
+  //Go to the start of the type
+  image_id = (this->drt[pos    ] << 24) |
+             (this->drt[pos + 1] << 16) |
+             (this->drt[pos + 2] << 8)  |
+             (this->drt[pos + 3]          );
+  return image_id;
+}
 
 uint32_t Nysa::find_device(uint32_t device_type, uint32_t subtype, uint32_t id){
   for (int i = 1; i  < this->get_drt_device_count() + 1; i ++){
