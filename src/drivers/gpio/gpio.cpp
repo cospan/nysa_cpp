@@ -20,8 +20,8 @@ GPIO::GPIO(Nysa *nysa, uint32_t dev_addr, bool debug) : Driver(nysa, debug){
 GPIO::~GPIO(){
 }
 //Arduino Compatible functions
-void GPIO::pinMode(uint32_t pin, uint32_t direction){	
-  
+void GPIO::pinMode(uint32_t pin, uint32_t direction){
+
   if (direction == 0){
     this->clear_output_mask_bit(pin);
   }
@@ -29,8 +29,8 @@ void GPIO::pinMode(uint32_t pin, uint32_t direction){
     this->set_output_mask_bit(pin);
   }
 }
-void GPIO::digitalWrite(uint32_t bit, uint32_t value){	
-  
+void GPIO::digitalWrite(uint32_t bit, uint32_t value){
+
   uint32_t gpios;
   gpios = this->get_gpios();
   if (value > 0){
@@ -42,7 +42,7 @@ void GPIO::digitalWrite(uint32_t bit, uint32_t value){
   }
   this->set_gpios(gpios);
 }
-bool GPIO::digitalRead(uint32_t bit){	
+bool GPIO::digitalRead(uint32_t bit){
   uint32_t gpios;
   gpios = this->get_gpios();
   return ((gpios & (1 << bit)) > 0);
@@ -60,37 +60,37 @@ void GPIO::toggle(uint32_t bit){
 }
 
 //Public Functions
-void GPIO::set_gpios(uint32_t gpios){	
-  
+void GPIO::set_gpios(uint32_t gpios){
+
   this->write_register(GPIO_PORT, gpios);
 }
 uint32_t GPIO::get_gpios(){
-  
+
   return this->read_register(GPIO_PORT);
 }
 
 //Setting bits to inputs or outputs
-void GPIO::set_output_mask(uint32_t output){	
-  
+void GPIO::set_output_mask(uint32_t output){
+
   this->write_register(GPIO_OUTPUT_ENABLE, output);
 }
-uint32_t GPIO::get_output_mask(){	
-  
+uint32_t GPIO::get_output_mask(){
+
   return this->read_register(GPIO_OUTPUT_ENABLE);
 }
-void GPIO::set_output_mask_bit(uint32_t bit){	
-  
+void GPIO::set_output_mask_bit(uint32_t bit){
+
   //
   this->set_register_bit(GPIO_OUTPUT_ENABLE, bit);
 }
-void GPIO::clear_output_mask_bit(uint32_t bit){	
-  
+void GPIO::clear_output_mask_bit(uint32_t bit){
+
   //
   this->clear_register_bit(GPIO_OUTPUT_ENABLE, bit);
 }
 
-bool GPIO::get_output_mask_bit(uint32_t bit){	
-  
+bool GPIO::get_output_mask_bit(uint32_t bit){
+
 
   uint32_t mask;
   mask = this->get_output_mask();
@@ -98,13 +98,13 @@ bool GPIO::get_output_mask_bit(uint32_t bit){
 }
 
 //Interrupt Enable
-void GPIO::set_interrupts_enable(uint32_t interrupts_enable){	
+void GPIO::set_interrupts_enable(uint32_t interrupts_enable){
   this->write_register(INTERRUPTS_ENABLE, interrupts_enable);
 }
-uint32_t GPIO::get_interrupts_enable(){	
+uint32_t GPIO::get_interrupts_enable(){
   return this->read_register(INTERRUPTS_ENABLE);
 }
-void GPIO::set_interrupts_enable_bit(uint32_t bit){	
+void GPIO::set_interrupts_enable_bit(uint32_t bit){
   uint32_t enable;
   enable = this->get_interrupts_enable();
   enable |= (1 << bit);
@@ -116,7 +116,7 @@ void GPIO::clear_interrupts_enable_bit(uint32_t bit){
   enable &= (~(1 << bit));
   this->set_interrupts_enable(enable);
 }
-bool GPIO::get_interrupts_enable_bit(uint32_t bit){	
+bool GPIO::get_interrupts_enable_bit(uint32_t bit){
   uint32_t enable;
   enable = this->get_interrupts_enable();
   return ((enable & (1 << bit)) > 0);
@@ -125,13 +125,13 @@ bool GPIO::get_interrupts_enable_bit(uint32_t bit){
 
 
 //Interrupt Edge
-void GPIO::set_interrupts_edge_mask(uint32_t edge_mask){	
+void GPIO::set_interrupts_edge_mask(uint32_t edge_mask){
   this->write_register(INTERRUPTS_EDGE, edge_mask);
 }
-uint32_t GPIO::get_interrupts_edge_mask(){	
+uint32_t GPIO::get_interrupts_edge_mask(){
   return this->read_register(INTERRUPTS_EDGE);
 }
-void GPIO::set_interrupts_edge_mask_bit(uint32_t bit){	
+void GPIO::set_interrupts_edge_mask_bit(uint32_t bit){
   uint32_t edge;
   edge = this->get_interrupts_edge_mask();
   edge |= (1 << bit);
@@ -143,14 +143,14 @@ void GPIO::clear_interrupts_edge_mask_bit(uint32_t bit){
   edge &= (~(1 << bit));
   this->set_interrupts_edge_mask(edge);
 }
-bool GPIO::get_interrupts_edge_mask_bit(uint32_t bit){	
+bool GPIO::get_interrupts_edge_mask_bit(uint32_t bit){
   uint32_t edge;
   edge = this->get_interrupts_edge_mask();
   return ((edge & (1 << bit)) > 0);
 }
 
 //Interrupts
-uint32_t GPIO::get_interrupts(){	
+uint32_t GPIO::get_interrupts(){
   return this->read_register(INTERRUPTS);
 }
 
