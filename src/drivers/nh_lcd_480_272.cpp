@@ -45,16 +45,16 @@ NH_LCD_480_272::NH_LCD_480_272(Nysa *nysa, uint32_t dev_addr, bool debug) : Driv
   this->set_device_id(LCD_DEVICE_ID);
   this->set_device_sub_id(NH_LCD_480_272_DEVICE_SUB_ID);
   this->debug = debug;
-  this->dma->setup_write( DMA_BASE0,
-                          DMA_BASE1,
-                          DMA_SIZE,
-                          REG_STATUS,
-                          REG_MEM_0_BASE,
-                          REG_MEM_0_SIZE,
-                          REG_MEM_1_BASE,
-                          REG_MEM_1_SIZE,
-                          BLOCKING,
-                          CADENCE);
+  this->dma->setup_write(     DMA_BASE0,
+                              DMA_BASE1,
+                              DMA_SIZE,
+                              REG_STATUS,
+                              REG_MEM_0_BASE,
+                              REG_MEM_0_SIZE,
+                              REG_MEM_1_BASE,
+                              REG_MEM_1_SIZE,
+                              BLOCKING,
+                              CADENCE);
 
   this->dma->set_status_bits( 0,
                               0,
