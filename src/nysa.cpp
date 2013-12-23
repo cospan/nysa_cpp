@@ -173,9 +173,9 @@ int Nysa::get_drt_device_count(){
   }
   return this->num_devices;
 }
-uint32_t Nysa::get_drt_device_type(uint32_t index){
+uint16_t Nysa::get_drt_device_type(uint32_t index){
   uint32_t pos = 0;
-  uint32_t type;
+  uint16_t type;
   if (this->drt == NULL){
     //XXX: Error handling
     return 0;
@@ -193,9 +193,52 @@ uint32_t Nysa::get_drt_device_type(uint32_t index){
   //Start of the device in question
   pos = (index) * 32;
   //Go to the start of the type
-  type = this->drt[pos] << 24 | this->drt[pos + 1] << 16 | this->drt[pos + 2] << 8| this->drt[pos + 3];
+  //type = this->drt[pos] << 24 | this->drt[pos + 1] << 16 | this->drt[pos + 2] << 8| this->drt[pos + 3];
+  type = this->drt[pos + 2] << 8| this->drt[pos + 3];
   return type;
 }
+uint16_t Nysa::get_drt_device_sub_type(uint32_t index){
+  uint32_t pos = 0;
+  uint16_t type;
+  if (this->drt == NULL){
+    //XXX: Error handling
+    return 0;
+  }
+  if (index == 0){
+    //DRT has no type
+    //XXX: Error handling
+    return 0;
+  }
+  if (index > this->num_devices){
+    //Out of range
+    //XXX: Error handling
+    return 0;
+  }
+  //Start of the device in question
+  pos = (index) * 32;
+  //Go to the start of the type
+  type = this->drt[pos] << 8 | this->drt[pos + 1];
+  return type;
+}
+uint16_t Nysa::get_drt_device_user_id(uint32_t index){
+  uint32_t pos = 0;
+  uint16_t user_id = 0;
+  if (this->drt == NULL){
+    return 0;
+  }
+  if (index > this->num_devices){
+    return 0;
+  }
+
+  //Start at the device in question
+  pos = index * 32; //3rd Value for a device is the unique ID
+  pos += 16;
+
+  user_id = (this->drt[pos + 2] << 8) | (this->drt[pos + 3]);
+  return user_id;
+}
+
+
 uint32_t Nysa::get_drt_device_size(uint32_t index){
   uint32_t size = 0;
   uint32_t pos = 0;
@@ -290,6 +333,12 @@ uint32_t Nysa::find_device(uint32_t device_type, uint32_t subtype, uint32_t id){
       if (subtype > 0){
         //User has specified a subtype ID
         //XXX: Not implemented yet
+        if (this->get_drt_device_sub_type(i) == subtype){
+          return true;
+        }
+        else {
+          return false;
+        }
       }
       if (id > 0){
         //User has specified an implimentation specific identification

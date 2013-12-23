@@ -66,7 +66,9 @@ class Nysa {
     int get_drt_version();
 
     int get_drt_device_count();
-    uint32_t get_drt_device_type(uint32_t index);
+    uint16_t get_drt_device_type(uint32_t index);
+    uint16_t get_drt_device_sub_type(uint32_t index);
+    uint16_t get_drt_device_user_id(uint32_t index);
     bool is_memory_device(uint32_t index);
     uint32_t get_drt_device_size(uint32_t index);
 
