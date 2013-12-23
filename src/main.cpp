@@ -8,6 +8,7 @@
 #include "arduino.hpp"
 #include "dma_demo_reader.hpp"
 #include "dma_demo_writer.hpp"
+#include "nh_lcd_480_272.hpp"
 #include "print_colors.hpp"
 
 #define PROGRAM_NAME "dionysus-nysa-test"
@@ -16,6 +17,7 @@
 #define MEMORY_TEST false
 //5 seconds
 #define GPIO_TEST_WAIT 10
+#define COLOR_BUFFER_COUNT 4
 
 using namespace Ftdi;
 
@@ -35,10 +37,10 @@ struct arguments {
   bool memory;
   bool dma_read;
   bool dma_write;
+  bool lcd_test;
 };
 
-static double TimevalDiff(const struct timeval *a, const struct timeval *b)
-{
+static double TimevalDiff(const struct timeval *a, const struct timeval *b){
     return (a->tv_sec - b->tv_sec) + 1e-6 * (a->tv_usec - b->tv_usec);
 }
 
@@ -72,6 +74,8 @@ static void usage (int exit_status){
       "\tDMA Read Demo\n"
       "-w, --dma_write\n"
       "\tDMA Write Demo\n"
+      "--lcd\n"
+      "\tLCD Color Test\n"
       P_NORMAL
       ,
       PROGRAM_NAME, DIONYSUS_VID, DIONYSUS_PID);
@@ -80,8 +84,8 @@ static void usage (int exit_status){
 
 static void parse_args(struct arguments* args, int argc, char *const argv[]){
   int print_usage = 0;
-  const char shortopts[] = "hdv:p:lbmrw";
-  struct option longopts[10];
+  const char shortopts[] = "hdv:p:lbmrwe";
+  struct option longopts[11];
   longopts[0].name = "help";
   longopts[0].has_arg = no_argument;
   longopts[0].flag = NULL;
@@ -127,10 +131,15 @@ static void parse_args(struct arguments* args, int argc, char *const argv[]){
   longopts[8].flag = NULL;
   longopts[8].val = 'w';
 
-  longopts[9].name = 0;
-  longopts[9].has_arg = 0;
-  longopts[9].flag = 0;
-  longopts[9].val = 0;
+  longopts[9].name = "lcd";
+  longopts[9].has_arg = no_argument;
+  longopts[9].flag = NULL;
+  longopts[9].val = 'e';
+
+  longopts[10].name = 0;
+  longopts[10].has_arg = 0;
+  longopts[10].flag = 0;
+  longopts[10].val = 0;
 
   while (1) {
     int option_idx = 0;
@@ -173,6 +182,9 @@ static void parse_args(struct arguments* args, int argc, char *const argv[]){
       case 'w':
         args->dma_write = true;
         break;
+      case 'e':
+        args->lcd_test = true;
+      break;
       case '?': /* Fall through */
       default:
         printf ("Unknown Command\n");
@@ -230,7 +242,7 @@ void test_dma_writer(DMA_DEMO_WRITER * w){
   delete(buffer);
 }
 
-void breath(GPIO *g, uint32_t timeout){
+void breath(Nysa *nysa, uint32_t device, uint32_t timeout, bool debug){
   struct timeval test_start;
   struct timeval test_now;
   double interval = 1.0;
@@ -244,6 +256,15 @@ void breath(GPIO *g, uint32_t timeout){
   uint32_t delay = 4;
   uint8_t direction = 1;
   printf ("Breath\n");
+
+  GPIO * gpio = new GPIO(nysa, device, debug);
+
+  gpio->pinMode(0, OUTPUT); //LED 0
+  gpio->pinMode(1, OUTPUT); //LED 1
+
+  gpio->pinMode(2, INPUT); //Button 0
+  gpio->pinMode(3, INPUT); //Button 1
+
 
   printf ("Max value: %d\n", max_val);
 
@@ -291,14 +312,18 @@ void breath(GPIO *g, uint32_t timeout){
     }
 
     if (position < current){
-      g->set_gpios(0x00000002);
+      gpio->set_gpios(0x00000002);
     }
     else {
-      g->set_gpios(0x00000001);
+      gpio->set_gpios(0x00000001);
     }
     gettimeofday(&test_now, NULL);
     interval = TimevalDiff(&test_now, &test_start);
   }
+  gpio->digitalWrite(0, LOW);
+  gpio->digitalWrite(1, LOW);
+  delete(gpio);
+
 };
 
 void test_buttons(Nysa *nysa, uint32_t dev_index, bool debug){
@@ -341,6 +366,74 @@ void test_buttons(Nysa *nysa, uint32_t dev_index, bool debug){
   delete(gpio);
 }
 
+
+void test_lcd(Nysa *nysa, uint32_t dev_index, bool debug){
+  uint8_t * buffer[COLOR_BUFFER_COUNT];
+  uint32_t  red = 0x00FF0000;
+  uint32_t  green = 0x0000FF00;
+  uint32_t  blue = 0x000000FF;
+  uint32_t  cyan = 0x0000FFF0;
+  uint32_t  purple = 0x00F000FF;
+  uint32_t  orange = 0x00FFF000;
+  uint32_t  pink = 0x00FF7070;
+
+  uint32_t size = 0;
+
+  NH_LCD_480_272 * lcd = new NH_LCD_480_272(nysa, dev_index, debug);
+  //Create the color buffers
+  size = lcd->get_buffer_size();
+  for (int i = 0; i < COLOR_BUFFER_COUNT; i++){
+    buffer[i] = new uint8_t [size];
+  }
+
+  lcd->start();
+  //Red
+  for (int i = 0; i < size / 4; i += 4){
+    buffer[0][i + 0] = (uint8_t) ((red >> 24) & 0xFF);
+    buffer[0][i + 1] = (uint8_t) ((red >> 16) & 0xFF);
+    buffer[0][i + 2] = (uint8_t) ((red >>  8) & 0xFF);
+    buffer[0][i + 3] = (uint8_t) ((red      ) & 0xFF);
+  }
+  //Cyan
+  for (int i = 0; i < size / 4; i += 4){
+    buffer[1][i + 0] = (uint8_t) ((cyan >> 24) & 0xFF);
+    buffer[1][i + 1] = (uint8_t) ((cyan >> 16) & 0xFF);
+    buffer[1][i + 2] = (uint8_t) ((cyan >>  8) & 0xFF);
+    buffer[1][i + 3] = (uint8_t) ((cyan      ) & 0xFF);
+  }
+  //Green
+  for (int i = 0; i < size / 4; i += 4){
+    buffer[2][i + 0] = (uint8_t) ((green >> 24) & 0xFF);
+    buffer[2][i + 1] = (uint8_t) ((green >> 16) & 0xFF);
+    buffer[2][i + 2] = (uint8_t) ((green >>  8) & 0xFF);
+    buffer[2][i + 3] = (uint8_t) ((green      ) & 0xFF);
+  }
+  //Blue
+  for (int i = 0; i < size / 4; i += 4){
+    buffer[3][i + 0] = (uint8_t) ((purple >> 24) & 0xFF);
+    buffer[3][i + 1] = (uint8_t) ((purple >> 16) & 0xFF);
+    buffer[3][i + 2] = (uint8_t) ((purple >>  8) & 0xFF);
+    buffer[3][i + 3] = (uint8_t) ((purple      ) & 0xFF);
+  }
+
+  //Write the LCD with the first color
+  lcd->dma_write(buffer[0]);
+  //Write the LCD with the second color
+  lcd->dma_write(buffer[1]);
+  //Write the LCD with the third color
+  lcd->dma_write(buffer[2]);
+  //Write the LCD with the fourth color
+  lcd->dma_write(buffer[3]);
+
+  lcd->stop();
+  for (int i = 0; i < COLOR_BUFFER_COUNT; i++){
+    delete(buffer[i]);
+  }
+
+
+  delete(lcd);
+}
+
 int main(int argc, char **argv){
   struct arguments args;
   args.vendor = DIONYSUS_VID;
@@ -349,6 +442,7 @@ int main(int argc, char **argv){
   args.leds = false;
   args.buttons = false;
   args.memory = false;
+  args.lcd_test = false;
   uint8_t* buffer = new uint8_t [8196];
 
   uint32_t num_devices;
@@ -389,7 +483,9 @@ int main(int argc, char **argv){
     dionysus.read_drt();
     for (int i = 1; i < dionysus.get_drt_device_count() + 1; i++){
       printf ("Device %d:\n", i);
-      printf ("\tType:\t\t0x%08X\n", dionysus.get_drt_device_type(i));
+      printf ("\tType:\t\t0x%04X\n", dionysus.get_drt_device_type(i));
+      printf ("\tSub Type:\t0x%04X\n", dionysus.get_drt_device_sub_type(i));
+      printf ("\tUser ID:\t0x%04X\n", dionysus.get_drt_device_user_id(i));
       printf ("\tSize:\t\t0x%08X (32-bit values)\n", dionysus.get_drt_device_size(i));
       printf ("\tAddress:\t0x%08X\n", dionysus.get_drt_device_addr(i));
       if (dionysus.is_memory_device(i)){
@@ -473,51 +569,46 @@ int main(int argc, char **argv){
       delete (buffer);
     }
 
-    uint32_t gpio_device = 0;
-    gpio_device = dionysus.find_device(get_gpio_device_type());
-    /*
-    for (int i = 1; i < dionysus.get_drt_device_count() + 1; i++){
-      if (dionysus.get_drt_device_type(i) == get_gpio_device_type()){
-        gpio_device = i;
-      }
-    }
-    */
-    if (gpio_device > 0){
+    uint32_t device = 0;
+
+    device = dionysus.find_device(get_gpio_device_type());
+
+    if (device > 0){
+      //Buttons and Interrupt test
       if (args.buttons){
         printf ("Testing buttons...\n");
-        test_buttons(&dionysus, gpio_device, args.debug);
+        test_buttons(&dionysus, device, args.debug);
       }
+      //LED Breath test
       if (args.leds){
-        GPIO *gpio = new GPIO(&dionysus, gpio_device, args.debug);
-        gpio->pinMode(0, OUTPUT); //LED 0
-        gpio->pinMode(1, OUTPUT); //LED 1
-
-        gpio->pinMode(2, INPUT); //Button 0
-        gpio->pinMode(3, INPUT); //Button 1
-
-        breath(gpio, GPIO_TEST_WAIT);
-        gpio->digitalWrite(0, LOW);
-        gpio->digitalWrite(1, LOW);
-
-        delete(gpio);
+        printf ("Testing LEDs...\n");
+        breath(&dionysus, device, GPIO_TEST_WAIT, args.debug);
       }
     }
 
-    uint32_t device = 0;
+    //DMA Read Test
     device = dionysus.find_device(get_dma_reader_device_type());
     if (args.dma_read && (device > 0)){
       DMA_DEMO_READER dma_reader = DMA_DEMO_READER(&dionysus, device, args.debug);
       test_dma_reader(&dma_reader);
     }
+    //DMA Write Test
     device = dionysus.find_device(get_dma_writer_device_type());
     printf ("Device: 0x%02X\n", device);
     if (args.dma_write && (device > 0)){
       DMA_DEMO_WRITER dma_writer = DMA_DEMO_WRITER(&dionysus, device, args.debug);
       test_dma_writer(&dma_writer);
     }
+
+    //LCD Color Test
+    device = dionysus.find_device(get_nh_lcd_480_272_type());
+    if (device > 0){
+      test_lcd(&dionysus, device, args.debug);
+    }
     dionysus.close();
   }
   return 0;
 }
+
 
 
