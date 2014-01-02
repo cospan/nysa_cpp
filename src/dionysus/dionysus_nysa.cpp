@@ -40,9 +40,9 @@ static uint32_t populate_write_mem_command(command_header_t* ch, uint32_t dword_
   ch->data_count[2] = (dword_len      ) & 0xFF;
 
   ch->address.mem_addr[0] = (address >> 24) & 0xFF;
-  ch->address.reg_addr[1] = (address >> 16) & 0xFF;
-  ch->address.reg_addr[2] = (address >> 8 ) & 0xFF;
-  ch->address.reg_addr[3] = (address      ) & 0xFF;
+  ch->address.mem_addr[1] = (address >> 16) & 0xFF;
+  ch->address.mem_addr[2] = (address >> 8 ) & 0xFF;
+  ch->address.mem_addr[3] = (address      ) & 0xFF;
   ch->data.data = 0x00;
   return COMMAND_HEADER_LEN;
 }
@@ -70,9 +70,9 @@ static uint32_t populate_read_mem_command(command_header_t * ch, uint32_t dword_
   ch->data_count[2] = (dword_len      ) & 0xFF;
 
   ch->address.mem_addr[0] = (address >> 24) & 0xFF;
-  ch->address.reg_addr[1] = (address >> 16) & 0xFF;
-  ch->address.reg_addr[2] = (address >> 8 ) & 0xFF;
-  ch->address.reg_addr[3] = (address      ) & 0xFF;
+  ch->address.mem_addr[1] = (address >> 16) & 0xFF;
+  ch->address.mem_addr[2] = (address >> 8 ) & 0xFF;
+  ch->address.mem_addr[3] = (address      ) & 0xFF;
   ch->data.data = 0x00;
   return COMMAND_HEADER_LEN;
 }

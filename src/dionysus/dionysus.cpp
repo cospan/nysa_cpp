@@ -1,4 +1,5 @@
 #include "dionysus_local.hpp"
+#include "ftdi.hpp"
 #include <stdio.h>
 #include <iostream>
 #include <sys/time.h>
@@ -8,6 +9,7 @@
 
 //Constructor
 Dionysus::Dionysus(bool debug){
+  printf ("%s(): Entered\n", __func__);
   //Open up Dionysus
   this->debug = debug;
   this->usb_is_open = false;
