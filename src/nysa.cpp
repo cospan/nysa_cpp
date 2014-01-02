@@ -92,7 +92,6 @@ int Nysa::set_register_bit(uint32_t dev_addr, uint32_t reg_addr, uint8_t bit){
   uint32_t reg;
   int retval = 0;
   printd("Entered\n");
-
   retval = this->read_register(dev_addr, reg_addr, &reg);
   CHECK_NYSA_ERROR("Error Reading Register");
 
@@ -360,11 +359,13 @@ uint32_t Nysa::get_image_id(){
 }
 
 uint32_t Nysa::find_device(uint32_t device_type, uint32_t subtype, uint32_t id){
+  //printf ("Finding device with type: 0x%04X\n", device_type);
   for (int i = 1; i  < this->get_drt_device_count() + 1; i ++){
     if (this->get_drt_device_type(i) == device_type){
       if (subtype > 0){
         //User has specified a subtype ID
         //XXX: Not implemented yet
+        //printf ("Checking for SUB ID: 0x%04X\n", subtype);
         if (this->get_drt_device_sub_type(i) == subtype){
           return true;
         }
