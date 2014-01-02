@@ -121,6 +121,7 @@ int Driver::close(){        //Clean up the device
 
 //Nysa Functions
 void Driver::write_periph_data(uint32_t addr, uint8_t *buffer, uint32_t size){
+//  printd("Entered\n");
   if (this->dev_index == 0){
     this->error = DEVICE_ID_NOT_SET;
     throw DEVICE_ID_NOT_SET;
@@ -131,6 +132,7 @@ void Driver::write_periph_data(uint32_t addr, uint8_t *buffer, uint32_t size){
   }
 }
 void Driver::read_periph_data(uint32_t addr, uint8_t *buffer, uint32_t size){
+//  printd("Entered\n");
   if (this->dev_index == 0){
     this->error = DEVICE_ID_NOT_SET;
     throw DEVICE_ID_NOT_SET;
@@ -143,6 +145,7 @@ void Driver::read_periph_data(uint32_t addr, uint8_t *buffer, uint32_t size){
 }
 
 void Driver::write_register(uint32_t reg_addr, uint32_t data){
+//  printd("Entered\n");
   if (this->dev_index == 0){
     printd("dev index = 0\n");
     this->error = DEVICE_ID_NOT_SET;
@@ -156,6 +159,7 @@ void Driver::write_register(uint32_t reg_addr, uint32_t data){
 }
 uint32_t Driver::read_register(uint32_t reg_addr){
   uint32_t data;
+//  printd("Entered\n");
   if (this->dev_index == 0){
     printd("dev index = 0\n");
     this->error = DEVICE_ID_NOT_SET;
@@ -170,9 +174,10 @@ uint32_t Driver::read_register(uint32_t reg_addr){
 }
 
 void Driver::set_register_bit(uint32_t reg_addr, uint8_t bit){
-  printd("Entered\n");
+//  printd("Entered\n");
+
   if (this->dev_index == 0){
-    printd("dev index = 0\n");
+    printf("%s() dev index = 0!\n", __func__);
     this->error = DEVICE_ID_NOT_SET;
     throw DEVICE_ID_NOT_SET;
     return;
@@ -180,6 +185,7 @@ void Driver::set_register_bit(uint32_t reg_addr, uint8_t bit){
   this->error = this->n->set_register_bit(this->dev_index, reg_addr, bit);
 }
 void Driver::clear_register_bit(uint32_t reg_addr, uint8_t bit){
+//  printd("Entered\n");
   if (this->dev_index == 0){
     printd("dev index = 0\n");
     this->error = DEVICE_ID_NOT_SET;
@@ -193,6 +199,7 @@ void Driver::clear_register_bit(uint32_t reg_addr, uint8_t bit){
 
 }
 bool Driver::read_register_bit(uint32_t reg_addr, uint8_t bit){
+//  printd("Entered\n");
   bool value;
   if (this->dev_index == 0){
     printd("dev index = 0\n");
