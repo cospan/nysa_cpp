@@ -9,7 +9,9 @@ enum DMA_DEMO_WRITER_REGISTERS{
   REG_MEM_0_BASE          = 2,
   REG_MEM_0_SIZE          = 3,
   REG_MEM_1_BASE          = 4,
-  REG_MEM_1_SIZE          = 5
+  REG_MEM_1_SIZE          = 5,
+  REG_WRITTEN_SIZE        = 6
+
 };
 
 enum CONTROL_REG {
@@ -88,6 +90,9 @@ bool DMA_DEMO_WRITER::empty(){
 }
 uint32_t DMA_DEMO_WRITER::get_buffer_size(){
   return DMA_SIZE;
+}
+uint32_t DMA_DEMO_WRITER::get_written_size(){
+  return this->read_register(REG_WRITTEN_SIZE);
 }
 //Data transfer
 void DMA_DEMO_WRITER::dma_write(uint8_t *buffer){

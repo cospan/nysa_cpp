@@ -8,10 +8,10 @@ enum _DMA_STATE {
   ST_FINISHED  = 3,
 };
 enum _BLOCK_STATE{
-  UNKNOWN   = -1,
-  BLOCK_EMPTY     = 0,
-  BLOCK_BUSY   = 1,
-  BLOCK_FULL      = 2
+  UNKNOWN       = -1,
+  BLOCK_EMPTY   = 0,
+  BLOCK_BUSY    = 1,
+  BLOCK_FULL    = 2
 };
 
 DMA::DMA (Nysa *nysa, Driver *driver, uint32_t dev_addr, bool debug){
@@ -91,8 +91,12 @@ int DMA::setup( uint32_t      mem_base0,
   this->strategy        = strategy;
 
   //Setup the core
-  this->nysa->write_register(this->dev_addr, REG_BASE[0], this->BASE[0]);
-  this->nysa->write_register(this->dev_addr, REG_BASE[1], this->BASE[1]);
+  this->driver->write_register(this->REG_BASE[0], this->BASE[0]);
+  this->driver->write_register(this->REG_BASE[1], this->BASE[1]);
+  //if (this->debug){
+  //  printf ("Base 0 Address: 0x%08X\n", this->driver->read_register(this->REG_BASE[0]));
+  //  printf ("Base 1 Address: 0x%08X\n", this->driver->read_register(this->REG_BASE[1]));
+  //}
   return 0;
 };
 
@@ -288,24 +292,24 @@ int DMA::write(uint8_t *buffer){
   uint32_t interrupts;
 
   while (!finished){
-//    printf ("%s(): Main loop\n", __func__);
+    printf ("%s(): Main loop\n", __func__);
     //Get the current status
     status = this->driver->read_register(this->REG_STATUS);
-//    printf ("%s(): Status Register: 0x%08X\n", __func__, status);
+    printf ("%s(): Status Register: 0x%08X\n", __func__, status);
     //Check if anything is ready
-    if ((status & (this->status_bit_empty[0] | this->status_bit_empty[1])) == 0){ 
+    if ((status & (this->status_bit_empty[0] | this->status_bit_empty[1])) == 0){
       //neither block is ready
       //wait for interrupts
       while (this->blocking){
-//        //printf ("%s(): Blocking...\n", __func__);
+        //printf ("%s(): Blocking...\n", __func__);
         //If the user is okay with waiting just keep waiting for interrupts
         this->nysa->wait_for_interrupts(1000, &interrupts);
         if (this->driver->is_interrupt_for_device(interrupts)) {
-//          printf ("%s(): Found an interrupt\n", __func__);
+          printf ("%s(): Found an interrupt\n", __func__);
           break;
         }
         else {
-//          printf ("%s(): Didn't find interrupts\n", __func__);
+          printf ("%s(): Didn't find interrupts\n", __func__);
           status = this->driver->read_register(this->REG_STATUS);
         }
       }
@@ -325,21 +329,45 @@ int DMA::write(uint8_t *buffer){
     switch (this->strategy){
       case (IMMEDIATE):
       case (CADENCE):
-//        printf ("%s(): In Strategy Switch...\n", __func__);
-//        printf ("%s(): block state [0]: 0x%08X\n", __func__, this->block_state[0]);
-//        printf ("%s(): block state [1]: 0x%08X\n", __func__, this->block_state[1]);
+        printf ("%s(): In Cadence Switch...\n", __func__);
+        printf ("%s(): block state [0]: 0x%08X\n", __func__, this->block_state[0]);
+        printf ("%s(): block state [1]: 0x%08X\n", __func__, this->block_state[1]);
         if ((this->block_state[0] == BLOCK_EMPTY) ||
             (this->block_state[1] == BLOCK_EMPTY)){
           //A FIFO is available, start sending data down NOW
           if (this->block_state[0] == BLOCK_EMPTY){
-//            printf ("%s(): Writing to register 0\n", __func__);
-            this->nysa->write_memory(this->BASE[0], &buffer[0], this->SIZE);
-            this->driver->write_register(this->REG_SIZE[0], this->SIZE);
+            printf ("%s(): Writing 0x%08X Bytes to block 0 (Loc: 0x%08X)\n",
+                __func__,
+                this->SIZE,
+                this->BASE[0]);
+            printf ("%s(): Writing 0x%08X 32 bit values to Reg size 0 (%d)\n",
+                __func__,
+                (this->SIZE / 4),
+                REG_SIZE[0]);
+
+            this->nysa->write_memory(this->BASE[0], buffer, this->SIZE);
+            this->driver->write_register(this->REG_SIZE[0], (this->SIZE / 4));
+
+
+            /*
+            printf ("%s(): Writing 0x%08X Bytes to block 1 (Loc: 0x%08X)\n",
+                __func__,
+                this->SIZE,
+                this->BASE[1]);
+            printf ("%s(): Writing 0x%08X 32 bit values to Reg size 1 (%d)\n",
+                __func__,
+                (this->SIZE / 4),
+                REG_SIZE[1]);
+            this->nysa->write_memory(this->BASE[1], buffer, this->SIZE);
+            this->driver->write_register(this->REG_SIZE[1], (this->SIZE / 4));
+            */
+
           }
           else {
-//            printf ("%s(): Writing to register 1\n", __func__);
-            this->nysa->write_memory(this->BASE[1], &buffer[1], this->SIZE);
-            this->driver->write_register(this->REG_SIZE[1], this->SIZE);
+            printf ("%s(): Writing 0x%08X Bytes to block 1 (Loc: 0x%08X)\n", __func__, this->SIZE, this->BASE[1]);
+            printf ("%s(): Writing 0x%08X 32 bit values to Reg size 1 (%d)\n", __func__, (this->SIZE / 4), REG_SIZE[1]);
+            this->nysa->write_memory(this->BASE[1], buffer, this->SIZE);
+            this->driver->write_register(this->REG_SIZE[1], (this->SIZE / 4));
           }
           finished = true;
           retval = 0;
@@ -349,8 +377,8 @@ int DMA::write(uint8_t *buffer){
         if ((this->block_state[0] == BLOCK_EMPTY) &&
             (this->block_state[1] == BLOCK_EMPTY)){
 
-          this->nysa->write_memory(this->BASE[0], &buffer[0], this->SIZE);
-          this->driver->write_register(this->REG_SIZE[0], this->SIZE);
+          this->nysa->write_memory(this->BASE[0], buffer, this->SIZE);
+          this->driver->write_register(this->REG_SIZE[0], (this->SIZE / 4));
         }
         break;
       default:
@@ -451,9 +479,9 @@ int DMA::read(uint8_t *buffer){
 //        printf ("%s(): IDLE State, requesting data\n", __func__);
         //No transactions have started
         this->block_select = 0;
-        this->driver->write_register(this->REG_SIZE[0], this->SIZE);
+        this->driver->write_register(this->REG_SIZE[0], (this->SIZE / 4));
         if (this->strategy == IMMEDIATE){
-          this->driver->write_register(this->REG_SIZE[1], this->SIZE);
+          this->driver->write_register(this->REG_SIZE[1], (this->SIZE / 4));
         }
         this->read_state = ST_BUSY;
         break;
@@ -497,12 +525,12 @@ int DMA::read(uint8_t *buffer){
           if ((this->strategy == IMMEDIATE) || (this->strategy == CADENCE)){
             if (this->block_state[0] == BLOCK_EMPTY){
 //              printf ("\tStart a read of block 0\n");
-              this->driver->write_register(this->REG_SIZE[0], this->SIZE);
+              this->driver->write_register(this->REG_SIZE[0], (this->SIZE / 4));
               this->block_state[0] = BLOCK_BUSY;
             }
             if (this->block_state[1] == BLOCK_EMPTY){
 //              printf ("\tStart a read of block 1\n");
-              this->driver->write_register(this->REG_SIZE[1], this->SIZE);
+              this->driver->write_register(this->REG_SIZE[1], (this->SIZE / 4));
               this->block_state[1] = BLOCK_BUSY;
             }
           }
@@ -538,7 +566,7 @@ int DMA::read(uint8_t *buffer){
             this->test_bit = 1;
             //status = this->driver->read_register(this->REG_STATUS);
             //if (this->strategy == IMMEDIATE) {
-              this->driver->write_register(this->REG_SIZE[0], this->SIZE);
+              this->driver->write_register(this->REG_SIZE[0], (this->SIZE / 4));
               this->block_state[0] = BLOCK_BUSY;
             //}
             //else {
@@ -553,7 +581,7 @@ int DMA::read(uint8_t *buffer){
             this->test_bit = 0;
             //status = this->driver->read_register(this->REG_STATUS);
             //if (this->strategy == IMMEDIATE) {
-              this->driver->write_register(this->REG_SIZE[0], this->SIZE);
+              this->driver->write_register(this->REG_SIZE[0], (this->SIZE / 4));
               this->block_state[1] = BLOCK_BUSY;
             //}
             //else {
@@ -576,7 +604,7 @@ int DMA::read(uint8_t *buffer){
           //if ((this->strategy == IMMEDIATE) || (this->strategy == CADENCE)){
             if (this->block_state[1] == BLOCK_EMPTY){
 //              printf ("\t\t\tStart reading from block 1\n");
-              this->driver->write_register(this->REG_SIZE[1], this->SIZE);
+              this->driver->write_register(this->REG_SIZE[1], (this->SIZE / 4));
               this->block_state[1] == BLOCK_BUSY;
             }
           //}
@@ -599,13 +627,13 @@ int DMA::read(uint8_t *buffer){
           //if ((this->strategy == IMMEDIATE) || (this->strategy == CADENCE)){
             if (this->block_state[0] == BLOCK_EMPTY){
 //              printf ("\t\t\tStart reading from block 0\n");
-              this->driver->write_register(this->REG_SIZE[0], this->SIZE);
+              this->driver->write_register(this->REG_SIZE[0], (this->SIZE / 4));
               this->block_state[0] == BLOCK_BUSY;
             }
           //  this->read_state = ST_BUSY;
           //}
           //if (this->strategy == IMMEDIATE){
-            this->driver->write_register(this->REG_SIZE[1], this->SIZE);
+            this->driver->write_register(this->REG_SIZE[1], (this->SIZE / 4));
             this->block_state[1] = BLOCK_BUSY;
           //  this->read_state = ST_BUSY;
           //}

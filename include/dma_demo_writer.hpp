@@ -32,6 +32,7 @@ class DMA_DEMO_WRITER : public Driver {
     bool finished();
     bool empty();
     uint32_t get_buffer_size();
+    uint32_t get_written_size();
 
     //Data transfer
     void dma_write(uint8_t *buffer);
