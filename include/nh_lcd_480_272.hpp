@@ -1,15 +1,15 @@
 #ifndef __NH_LCD_480_272_HPP__
 #define __NH_LCD_480_272_HPP__
 
-#define LCD_DEVICE_ID 13
-#define NH_LCD_480_272_DEVICE_SUB_ID 0
+#define NH_LCD_480_272_DEVICE_SUB_ID 1
 
-#define NH_LCD_480_272_HEIGHT 480
-#define NH_LCD_480_272_WIDTH 272
+#define NH_LCD_480_272_HEIGHT 272
+#define NH_LCD_480_272_WIDTH 480
 
 #define BLOCKING true
 
 #include "driver.hpp"
+#include "lcd.hpp"
 
 const static uint32_t get_nh_lcd_480_272_type(){
   return (uint32_t) NH_LCD_480_272_DEVICE_SUB_ID;
@@ -18,10 +18,11 @@ const static uint32_t get_nh_lcd_480_272_type(){
 class NH_LCD_480_272 : public Driver {
 
   private:
+    //DMA Size is the size of an entire pixel (32 bits)
+    const static uint32_t DMA_SIZE                    = ((NH_LCD_480_272_HEIGHT) * (NH_LCD_480_272_WIDTH) * 4);
     const static uint32_t DMA_BASE0                   = 0x00000000;
-    const static uint32_t DMA_BASE1                   = 0x00010000;
+    const static uint32_t DMA_BASE1                   = (NH_LCD_480_272_HEIGHT * NH_LCD_480_272_WIDTH);
 
-    const static uint32_t DMA_SIZE                    = ((NH_LCD_480_272_HEIGHT) * (NH_LCD_480_272_WIDTH));
 
     //LCD Constants
     const static uint16_t HSYNC_TOTAL                 =  525;
@@ -127,7 +128,6 @@ class NH_LCD_480_272 : public Driver {
     void override_write_enable(bool enable);
     void enable_chip_select(bool enable);
     void pixel_frequency_to_array(double pll_clock = 100, double pixel_freq = 5.3, uint8_t *buffer = NULL);
-    void setup();
 
   public:
     NH_LCD_480_272(Nysa *nysa, uint32_t dev_addr, bool debug = false);
@@ -135,6 +135,7 @@ class NH_LCD_480_272 : public Driver {
 
     //Control
     void start();
+    void setup();
     void stop();
 
     uint32_t get_buffer_size();

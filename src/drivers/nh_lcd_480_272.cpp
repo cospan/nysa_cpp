@@ -6,8 +6,8 @@
 #include "print_colors.hpp"
 
 //LCD Constants
-#define LCD_WIDTH                    480
-#define LCD_HEIGHT                   272
+
+void print_debug(const char *name , bool writing, uint8_t* mode, uint32_t length);
 
 enum REGISTERS{
   REG_CONTROL               = 0,
@@ -39,12 +39,27 @@ enum STATUS_REG {
   STATUS_1_EMPTY            = 1
 };
 
-
-
 NH_LCD_480_272::NH_LCD_480_272(Nysa *nysa, uint32_t dev_addr, bool debug) : Driver(nysa, debug){
   this->set_device_id(LCD_DEVICE_ID);
+  this->find_device();
   this->set_device_sub_id(NH_LCD_480_272_DEVICE_SUB_ID);
   this->debug = debug;
+  if (this->debug){
+    printf ("Setting up DMA Write\n");
+    printf ("\tDMA Base 0:      0x%08X\n", DMA_BASE0);
+    printf ("\tDMA Base 1:      0x%08X\n", DMA_BASE1);
+    printf ("\tDMA Size:        0x%08X\n", DMA_SIZE);
+    printf ("\tDMA Size:        %d\n", DMA_SIZE);
+    printf ("\tReg Status:      0x%08X\n", REG_STATUS);
+    printf ("\tReg Mem 0 Base:  0x%08X\n", REG_MEM_0_BASE);
+    printf ("\tReg Mem 0 Size:  0x%08X\n", REG_MEM_0_SIZE);
+    printf ("\tReg Mem 1 base:  0x%08X\n", REG_MEM_1_BASE);
+    printf ("\tReg Mem 1 Size:  0x%08X\n", REG_MEM_1_SIZE);
+    printf ("\tBlocking:        %d\n", BLOCKING);
+    printf ("\tStrategy:        %d\n", CADENCE);
+  }
+
+  this->dma                   = new DMA(nysa, this, dev_addr, debug);
   this->dma->setup_write(     DMA_BASE0,
                               DMA_BASE1,
                               DMA_SIZE,
@@ -55,12 +70,16 @@ NH_LCD_480_272::NH_LCD_480_272(Nysa *nysa, uint32_t dev_addr, bool debug) : Driv
                               REG_MEM_1_SIZE,
                               BLOCKING,
                               CADENCE);
-
   this->dma->set_status_bits( 0,
                               0,
                               STATUS_0_EMPTY,
                               STATUS_1_EMPTY);
 
+  if (this->debug){
+    printf ("LCD Register Dump\n");
+    printf ("BASE 0: 0x%08X\n", this->read_register(REG_MEM_0_BASE));
+    printf ("BASE 1: 0x%08X\n", this->read_register(REG_MEM_1_BASE));
+  }
 
 }
 NH_LCD_480_272::~NH_LCD_480_272(){
@@ -69,11 +88,11 @@ NH_LCD_480_272::~NH_LCD_480_272(){
 
 void NH_LCD_480_272::setup(){
   uint8_t buffer[256];
-  uint8_t lcd_width_hb = (((LCD_WIDTH - 1) >> 8) & 0xFF);
-  uint8_t lcd_width_lb = ( (LCD_WIDTH - 1)       & 0xFF);
+  uint8_t lcd_width_hb = (((NH_LCD_480_272_WIDTH - 1) >> 8) & 0xFF);
+  uint8_t lcd_width_lb = ( (NH_LCD_480_272_WIDTH - 1)       & 0xFF);
 
-  uint8_t lcd_height_hb = (((LCD_HEIGHT - 1) >> 8) & 0xFF);
-  uint8_t lcd_height_lb = ((LCD_HEIGHT - 1) & 0xFF);
+  uint8_t lcd_height_hb = (((NH_LCD_480_272_HEIGHT - 1) >> 8) & 0xFF);
+  uint8_t lcd_height_lb = ((NH_LCD_480_272_HEIGHT - 1) & 0xFF);
 
   //Horizontal
   uint8_t hsync_hb = (((HSYNC_TOTAL) >> 8) & 0xFF);
@@ -108,24 +127,44 @@ void NH_LCD_480_272::setup(){
   uint8_t page_end_lb = ((PAGE_END - 1) & 0xFF);
 
   //Reset the LCD
-  this->enable_chip_select(true);
-  this->start();
-  this->enable_backlight(true);
-  this->reset();
-  this->override_write_enable(true);
+  this->enable_chip_select(true); printd("Enable Chip Select\n");
+  this->start();                  printd("Enable the interrupts and core\n");
+  this->enable_backlight(true);   printd("Enable Backlight\n");
+  this->override_write_enable(true);  printd("Assert Write enable\n");
+  this->reset();                  printd("Reset the LCD Core\n");
+  this->override_write_enable(false);  printd("Deassert Write Enable\n");
 
+  /*
+  if (this->debug){
+    uint8_t pwr_mode;
+    this->read_lcd_command(MEM_ADR_PWR_MODE, 1, &pwr_mode);
+    print_debug("MEM_ADR_PWR_MODE", false, &pwr_mode, 1);
+  }
+  */
   //Soft Reset the MCU
-  this->write_lcd_command(MEM_ADR_RESET); printd("Reset LCD\n");
-  usleep(50000);
-  this->write_lcd_command(MEM_ADR_RESET); printd("Reset LCD\n");
-  usleep(20000);
+  this->write_lcd_command(MEM_ADR_RESET); printd("Reset LCD Core\n");
+  print_debug("MEM_ADR_RESET", true, NULL, 0);
+  usleep(500000);                           printd("Sleep for 500mS\n");
+  this->write_lcd_command(MEM_ADR_RESET);
+  print_debug("MEM_ADR_RESET", true, NULL, 0); printd("Reset LCD Core\n");
+  usleep(200000);                           printd("Sleep for 200mS\n");
   //Start the PLL
   buffer[0] = 0x01;
-  this->write_lcd_command(MEM_ADR_SET_PLL, 1, buffer);
-  usleep(10000);
+  this->write_lcd_command(MEM_ADR_SET_PLL, 1, buffer);  printd("Start the PLL\n");
+  print_debug("MEM_ADR_SET_PLL", true, buffer, 1);
+  usleep(100000);                           printd("Sleep for 100mS\n");
   //Lock the PLL
   buffer[0] = 0x03;
-  this->write_lcd_command(MEM_ADR_SET_PLL, 1, buffer);
+  this->write_lcd_command(MEM_ADR_SET_PLL, 1, buffer);  printd("Lock the PLL\n");
+  print_debug("MEM_ADR_SET_PLL", true, buffer, 1);
+
+  /*
+  if (this->debug){
+    this->read_lcd_command(MEM_ADR_GET_LCD_MODE, 7, buffer);
+    print_debug("MEM_ADR_GET_LCD_MODE", false, buffer, 7);
+  }
+  */
+
   //Setup the LCD
   buffer[0] = 0x00;         //Set TFT Mode: 0x0C ??
   buffer[1] = 0x00;         //Set TFT Mode & Hsync + Vsync + DEN Mode
@@ -134,21 +173,32 @@ void NH_LCD_480_272::setup(){
   buffer[4] = lcd_height_hb;//Set Vertical Size High Byte
   buffer[5] = lcd_height_lb;//Set Vertical Size Low Byte
   buffer[6] = 0x00;         //Set even/odd line RGB sequency = RGB
-  this->write_lcd_command(MEM_ADR_SET_LCD_MODE, 7, buffer);
+  this->write_lcd_command(MEM_ADR_SET_LCD_MODE, 7, buffer); printd("Setup the LCD Mode\n");
+  print_debug("MEM_ADR_SET_LCD_MODE", true, buffer, 7);
+
+  /*
+  if (this->debug){
+    this->read_lcd_command(MEM_ADR_GET_LCD_MODE, 7, buffer);
+    print_debug("MEM_ADR_GET_LCD_MODE", false, buffer, 7);
+  }
+  */
 
   //Set Pixel data I/F format = 8 bit
   buffer[0] = 0x00;
-  this->write_lcd_command(MEM_ADR_SET_PIX_DAT_INT, 1, buffer);
+  this->write_lcd_command(MEM_ADR_SET_PIX_DAT_INT, 1, buffer); printd("Set the pixel buffer : 8bits\n");
+  print_debug("MEM_ADR_SET_PIX_DAT_INT", true, buffer, 1);
 
   //Set RGB Format: 6 6 6
   buffer[0] = 0x60;
-  this->write_lcd_command(MEM_ADR_SET_PIXEL_FORMAT, 1, buffer);
- 
+  this->write_lcd_command(MEM_ADR_SET_PIXEL_FORMAT, 1, buffer); printd("pixel format: 6:6:6\n");
+  print_debug("MEM_ADR_SET_PIXEL_FORMAT", true, buffer, 1);
+
   //Setup PLL Frequency
   buffer[0] = 0x01;
   buffer[1] = 0x45;
   buffer[2] = 0x47;
-  this->write_lcd_command(MEM_ADR_SET_LSHIFT_FREQ, 3, buffer);
+  this->write_lcd_command(MEM_ADR_SET_LSHIFT_FREQ, 3, buffer); printd("set PLL Frequency\n");
+  print_debug("MEM_ADR_SET_LSHIFT_FREQ", true, buffer, 3);
 
   //Setup Horizontal Behavior
   buffer[0] = hsync_hb;               //(high byte Set HSYNC Total Lines: 525
@@ -158,7 +208,8 @@ void NH_LCD_480_272::setup(){
   buffer[4] = HSYNC_PULSE;            //Set horizontal balnking period 16 = 15 + 1
   buffer[5] = hsync_pulse_start_hb;   //(high byte Set Hsync pulse start position
   buffer[6] = hsync_pulse_start_lb;   //(low byte Set Hsync pulse start position
-  this->write_lcd_command(MEM_ADR_SET_HORIZ_PERIOD, 7, buffer);
+  this->write_lcd_command(MEM_ADR_SET_HORIZ_PERIOD, 7, buffer); printd("Set Horizontal Behavior\n");
+  print_debug("MEM_ADR_SET_HORIZ_PERIOD", true, buffer, 7);
 
 
   //Setup Vertical Blanking Period
@@ -169,26 +220,53 @@ void NH_LCD_480_272::setup(){
   buffer[4] = VSYNC_PULSE;            //Vsync pulse: 8 = 7 + 1
   buffer[5] = vsync_pulse_start_hb;   //(high byte Set Vsync pusle start position
   buffer[6] = vsync_pulse_start_lb;   //(low byte Set Vsync pusle start position
-  this->write_lcd_command(MEM_ADR_SET_VERT_PERIOD, 7, buffer);
+  this->write_lcd_command(MEM_ADR_SET_VERT_PERIOD, 7, buffer); printd("Set vertical blanking period\n");
+  print_debug("MEM_ADR_SET_VERT_PERIOD", true, buffer, 7);
 
-  //Setup Column Address
+  //Setup column address
+  buffer[0] = column_start_hb; //(high byte) Set start column address: 0
+  buffer[1] = column_start_lb; //(low byte) Set start column address: 0
+  buffer[2] = column_end_hb;   //(high byte) Set end column address: 479
+  buffer[3] = column_end_lb;   //(low byte) Set end column address: 479
+  this->write_lcd_command(MEM_ADR_SET_COLUMN_ADR, 4, buffer);
+
+  print_debug("MEM_ADR_SET_COLUMN_ADR", true, buffer, 4);
+
+
+  //Setup Page Address
   buffer[0] = page_start_hb;   //(high byte Start page address: 0
   buffer[1] = page_start_lb;   //(low byte Start page address: 0
   buffer[2] = page_end_hb;     //(high byte end page address: 271
   buffer[3] = page_end_lb;     //(low byte end page address: 271
-  this->write_lcd_command(MEM_ADR_SET_PAGE_ADR, 4, buffer);
+  this->write_lcd_command(MEM_ADR_SET_PAGE_ADR, 4, buffer); printd("Set Column Address\n");
+  print_debug("MEM_ADR_SET_PAGE_ADR", true, buffer, 4);
+
+  buffer[0] = 0x00;
+  this->write_lcd_command(MEM_ADR_SET_ADR_MODE, 1, buffer); printd("Set Image Configuration\n");
+  print_debug("MEM_ADR_SET_ADR_MODE", true, buffer, 1);
 
   //Setup Image Configuration
-  this->write_lcd_command(MEM_ADR_EXIT_PARTIAL_MODE);
-  this->write_lcd_command(MEM_ADR_EXIT_IDLE_MODE);
-  this->write_lcd_command(MEM_ADR_SET_DISPLAY_ON);
+  this->write_lcd_command(MEM_ADR_EXIT_PARTIAL_MODE); printd("Disable partial Mode\n");
+  print_debug("MEM_ADR_EXIT_PARTIAL_MODE", true, buffer, 0);
+  this->write_lcd_command(MEM_ADR_EXIT_IDLE_MODE);  printd("Exit IDLE\n");
+  print_debug("MEM_ADR_EXIT_IDLE_MODE", true, buffer, 0);
+  this->write_lcd_command(MEM_ADR_SET_DISPLAY_ON);  printd("Display On\n");
+  print_debug("MEM_ADR_SET_DISPLAY_ON", true, buffer, 0);
+
   //Setup the correct pixel count
-  this->write_register(REG_PIXEL_COUNT, DMA_SIZE);
+  this->write_register(REG_PIXEL_COUNT,
+                       (uint32_t)(NH_LCD_480_272_HEIGHT * NH_LCD_480_272_WIDTH));
+  if (this->debug){
+    printf ("%s(): Set Pixel Count to: 0x%08X\n",
+            __func__,
+            (NH_LCD_480_272_HEIGHT * NH_LCD_480_272_WIDTH));
+  }
 
   //Enable Tearing
   buffer[0] = 0x00;
-  this->write_lcd_command(MEM_ADR_SET_TEAR_ON);
-  this->enable_tearing(true);
+  this->write_lcd_command(MEM_ADR_SET_TEAR_ON, 1, buffer); printd("Enable tearing control\n");
+  print_debug("MEM_ADR_SET_TEAR_ON", true, buffer, 1);
+  this->enable_tearing(true);                   printd("Enable tearing in core\n");
 
 }
 
@@ -278,6 +356,7 @@ void NH_LCD_480_272::start(){
 void NH_LCD_480_272::stop(){
   this->clear_register_bit(REG_CONTROL, CONTROL_ENABLE);
   this->clear_register_bit(REG_CONTROL, CONTROL_ENABLE_INTERRUPT);
+  this->enable_backlight(false);
 }
 
 void NH_LCD_480_272::reset(){
@@ -295,5 +374,39 @@ uint32_t NH_LCD_480_272::get_buffer_size(){
 
 //Data Transfer
 void NH_LCD_480_272::dma_write(uint8_t *buffer){
+  this->dma->write(buffer);
+}
+
+void print_debug(const char* name, bool writing, uint8_t* mode, uint32_t length){
+
+  if (writing){
+    printf (P_CYAN);
+    printf ("LCD Write: %s\n", name);
+    printf (P_BLUE);
+    if (length > 0){
+      printf ("\t");
+    }
+    for (unsigned i = 0; i < length; i++){
+      printf ("%02X ", mode[i]);
+    }
+    if (length > 0){
+      printf ("\n");
+    }
+  }
+  else{
+    printf (P_MAGENTA);
+    printf ("LCD Read: %s\n", name);
+    printf (P_YELLOW);
+    if (length > 0){
+      printf ("\t");
+    }
+    for (unsigned i = 0; i < length; i++){
+      printf ("%02X ", mode[i]);
+    }
+    if (length > 0){
+      printf ("\n");
+    }
+  }
+  printf (P_NORMAL);
 }
 
